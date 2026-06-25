@@ -93,6 +93,15 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- Runs the data generator via ./mvnw exec:java (see GeneratorMain javadoc for args) -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>com.akamai.miniwsa.generator.GeneratorMain</mainClass>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

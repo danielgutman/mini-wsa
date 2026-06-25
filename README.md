@@ -126,6 +126,24 @@ curl "http://localhost:8080/v1/events/samples?configId=14227&category=INJECTION&
 }
 ```
 
+## Generating test data
+
+A seeded generator produces realistic events plus **attack waves** (bursts from one IP on
+one sensitive path within 3 minutes) — useful for exercising top attackers/paths, the
+repeat-offender bonus, and category/action distributions.
+
+```bash
+# Writes a JSON array (default generated-events.json)
+./mvnw -q compile exec:java -Dexec.args="--count 10000 --output generated-events.json"
+
+# Feed it straight to the ingestion API
+curl -X POST http://localhost:8080/v1/events/ingest \
+  -H "Content-Type: application/json" --data @generated-events.json
+```
+
+Options (all optional): `--count`, `--output`, `--seed`, `--config-id`, `--waves`,
+`--wave-size`. A fixed `--seed` makes output reproducible.
+
 ## Architecture
 
 Clean / hexagonal layering — the domain stays free of Spring, HTTP, and JDBC:
