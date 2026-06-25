@@ -1,0 +1,65 @@
+name: Release
+
+# Runs only when a version is released (a v* tag is pushed). The full-pipeline E2E test
+# (10k+ events through a production-like ClickHouse) must pass before the GitHub Release is
+# created — so a release can only succeed if the end-to-end pipeline works.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:   # manual E2E run (does not create a release)
+
+jobs:
+  e2e:
+    name: Full-pipeline E2E
+    runs-on: ubuntu-latest
+
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8
+        ports:
+          - 8123:8123
+          - 9000:9000
+        env:
+          CLICKHOUSE_DB: mini_wsa
+          CLICKHOUSE_USER: mini_wsa
+          CLICKHOUSE_PASSWORD: mini_wsa
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1' || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+
+      - name: Run full-pipeline E2E test
+        env:
+          E2E_ENABLED: "true"
+          MINIWSA_STORAGE: clickhouse
+          CLICKHOUSE_URL: jdbc:clickhouse://localhost:8123/mini_wsa
+          CLICKHOUSE_USER: mini_wsa
+          CLICKHOUSE_PASSWORD: mini_wsa
+        run: ./mvnw --batch-mode --no-transfer-progress -Dtest=FullPipelineE2ETest test
+
+  release:
+    name: Create GitHub Release
+    needs: e2e   # release only happens if the E2E job succeeded
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
