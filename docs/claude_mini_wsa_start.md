@@ -816,7 +816,8 @@ Recommended tags:
 git tag v0.1-ingestion
 git tag v0.2-enrichment
 git tag v0.3-stats
-git tag v0.4-generator
+git tag v0.4-sample
+git tag v0.5-generator
 git tag v1.0-core-complete
 ```
 

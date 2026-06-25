@@ -154,12 +154,12 @@ ClickHouse
 | Phase | Scope | Tag |
 |-------|-------|-----|
 | 1 | Project skeleton, health, Docker Compose, CI | — |
-| 2 | Domain model, enums, classifier, threat score | `v0.2-enrichment` |
-| 3 | Ingestion API (single + batch, validation) | `v0.1-ingestion` |
-| 4 | ClickHouse storage + repeat-offender query | `v0.3-storage` |
-| 5 | Summary stats API | `v0.4-stats` |
-| 6 | Samples API (filters + pagination) | `v0.5-samples` |
-| 7 | Data generator (attack waves) | `v0.6-generator` |
+| 2 | Ingestion API (single + batch, validation, receivedAt) | `v0.1-ingestion` |
+| 3 | Enrichment (attack type + threat score + repeat offender) | `v0.2-enrichment` |
+| 4 | ClickHouse storage adapter | — |
+| 5 | Summary stats API | `v0.3-stats` |
+| 6 | Samples API (filters + pagination) | `v0.4-sample` |
+| 7 | Data generator (attack waves) | `v0.5-generator` |
 | 8 | README polish, trade-offs | `v1.0-core-complete` |
 
 ## Storage choice
