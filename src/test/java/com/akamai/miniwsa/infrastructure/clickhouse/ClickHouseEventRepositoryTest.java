@@ -2,6 +2,8 @@ package com.akamai.miniwsa.infrastructure.clickhouse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.akamai.miniwsa.application.query.SamplePage;
+import com.akamai.miniwsa.application.query.SamplesQuery;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.domain.enums.Action;
@@ -102,6 +104,33 @@ class ClickHouseEventRepositoryTest {
         assertThat(stats.topAttackers().getFirst().count()).isEqualTo(2);
         assertThat(stats.topTargetedPaths().getFirst().path()).isEqualTo("/login");
         assertThat(stats.topTargetedPaths().getFirst().count()).isEqualTo(2);
+    }
+
+    @Test
+    void getSamplesPaginatesNewestFirstAndReconstructsEvent() {
+        long configId = 556L;
+        repository.saveAll(List.of(
+                summaryEvent("p1", "1.1.1.1", "/login", RuleCategory.INJECTION, Action.DENY, 75, configId, "2026-05-20T10:00:00Z"),
+                summaryEvent("p2", "1.1.1.1", "/login", RuleCategory.INJECTION, Action.DENY, 75, configId, "2026-05-20T10:05:00Z"),
+                summaryEvent("p3", "2.2.2.2", "/x", RuleCategory.BOT, Action.ALERT, 55, configId, "2026-05-20T10:10:00Z")));
+
+        SamplePage page = repository.getSamples(
+                new SamplesQuery(configId, null, null, null, null, 2, 0));
+
+        assertThat(page.total()).isEqualTo(3);
+        assertThat(page.items()).hasSize(2);
+        // Newest first
+        assertThat(page.items().getFirst().event().eventId()).isEqualTo("p3");
+        // Round-trips enum/enrichment fields out of ClickHouse
+        assertThat(page.items().getFirst().event().rule().category()).isEqualTo(RuleCategory.BOT);
+        assertThat(page.items().getFirst().event().action()).isEqualTo(Action.ALERT);
+        assertThat(page.items().getFirst().threatScore()).isEqualTo(55);
+
+        SamplePage filtered = repository.getSamples(
+                new SamplesQuery(configId, null, null, RuleCategory.INJECTION, null, 20, 0));
+        assertThat(filtered.total()).isEqualTo(2);
+        assertThat(filtered.items()).allSatisfy(e ->
+                assertThat(e.event().rule().category()).isEqualTo(RuleCategory.INJECTION));
     }
 
     private static EnrichedSecurityEvent summaryEvent(String id, String ip, String path, RuleCategory category,
