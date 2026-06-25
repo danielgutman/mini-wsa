@@ -13,9 +13,12 @@ import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.AttackerStats;
 import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
+import com.akamai.miniwsa.application.query.TimeSeriesBucket;
+import com.akamai.miniwsa.application.query.TimeSeriesQuery;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +101,43 @@ public class InMemoryEventRepository
         List<EnrichedSecurityEvent> page = List.copyOf(filtered.subList(fromIndex, toIndex));
 
         return new SamplePage(filtered.size(), query.limit(), query.offset(), page);
+    }
+
+    @Override
+    public List<TimeSeriesBucket> getTimeSeries(TimeSeriesQuery query) {
+        long stepSeconds = query.interval().duration().toSeconds();
+
+        List<Instant> timestamps = store.stream()
+                .filter(enriched -> inRange(enriched, query.configId(), query.from(), query.to()))
+                .map(enriched -> enriched.event().timestamp())
+                .toList();
+
+        List<TimeSeriesBucket> buckets = new ArrayList<>();
+        for (Instant start = floorToInterval(query.from(), stepSeconds);
+                start.isBefore(query.to());
+                start = start.plusSeconds(stepSeconds)) {
+            Instant end = start.plusSeconds(stepSeconds);
+            final Instant bucketStart = start;
+            long count = timestamps.stream()
+                    .filter(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(end))
+                    .count();
+            buckets.add(new TimeSeriesBucket(bucketStart, end, count));
+        }
+        return buckets;
+    }
+
+    private static boolean inRange(EnrichedSecurityEvent enriched, Long configId, Instant from, Instant to) {
+        SecurityEvent event = enriched.event();
+        if (configId != null && configId != event.configId()) {
+            return false;
+        }
+        Instant timestamp = event.timestamp();
+        return !timestamp.isBefore(from) && timestamp.isBefore(to);
+    }
+
+    private static Instant floorToInterval(Instant instant, long stepSeconds) {
+        long aligned = Math.floorDiv(instant.getEpochSecond(), stepSeconds) * stepSeconds;
+        return Instant.ofEpochSecond(aligned);
     }
 
     private static boolean matches(EnrichedSecurityEvent enriched, SamplesQuery query) {

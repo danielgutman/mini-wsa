@@ -10,6 +10,8 @@ import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.AttackerStats;
 import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
+import com.akamai.miniwsa.application.query.TimeSeriesBucket;
+import com.akamai.miniwsa.application.query.TimeSeriesQuery;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -24,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +103,7 @@ public class ClickHouseEventRepository
 
     @Override
     public SummaryStats getSummary(SummaryQuery query) {
-        Filter filter = filterFor(query);
+        Filter filter = rangeFilter(query.configId(), query.from(), query.to());
 
         Long total = jdbcTemplate.queryForObject(
                 "SELECT count() FROM security_events " + filter.where, Long.class, filter.params);
@@ -157,17 +160,47 @@ public class ClickHouseEventRepository
         return new SamplePage(total == null ? 0L : total, query.limit(), query.offset(), items);
     }
 
+    @Override
+    public List<TimeSeriesBucket> getTimeSeries(TimeSeriesQuery query) {
+        long stepSeconds = query.interval().duration().toSeconds();
+        Filter filter = rangeFilter(query.configId(), query.from(), query.to());
+
+        Map<Instant, Long> countsByBucket = new HashMap<>();
+        jdbcTemplate.query(
+                "SELECT toStartOfInterval(timestamp, INTERVAL " + stepSeconds + " second) AS bucket, count() AS c "
+                        + "FROM security_events " + filter.where + " GROUP BY bucket",
+                rs -> {
+                    countsByBucket.put(toInstant(rs, "bucket"), rs.getLong("c"));
+                },
+                filter.params);
+
+        // Build a contiguous, interval-aligned series, filling empty buckets with 0.
+        List<TimeSeriesBucket> buckets = new ArrayList<>();
+        for (Instant start = floorToInterval(query.from(), stepSeconds);
+                start.isBefore(query.to());
+                start = start.plusSeconds(stepSeconds)) {
+            buckets.add(new TimeSeriesBucket(start, start.plusSeconds(stepSeconds),
+                    countsByBucket.getOrDefault(start, 0L)));
+        }
+        return buckets;
+    }
+
     /** Builds the shared WHERE clause and positional parameters for the time range (+ optional config). */
-    private static Filter filterFor(SummaryQuery query) {
+    private static Filter rangeFilter(Long configId, Instant from, Instant to) {
         StringBuilder where = new StringBuilder("WHERE timestamp >= ? AND timestamp < ?");
         List<Object> params = new ArrayList<>();
-        params.add(utc(query.from()));
-        params.add(utc(query.to()));
-        if (query.configId() != null) {
+        params.add(utc(from));
+        params.add(utc(to));
+        if (configId != null) {
             where.append(" AND config_id = ?");
-            params.add(query.configId());
+            params.add(configId);
         }
         return new Filter(where.toString(), params.toArray());
+    }
+
+    private static Instant floorToInterval(Instant instant, long stepSeconds) {
+        long aligned = Math.floorDiv(instant.getEpochSecond(), stepSeconds) * stepSeconds;
+        return Instant.ofEpochSecond(aligned);
     }
 
     /** Builds the WHERE clause for samples, where every filter (including the range) is optional. */

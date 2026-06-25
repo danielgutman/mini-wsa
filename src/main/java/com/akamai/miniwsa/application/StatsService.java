@@ -3,6 +3,9 @@ package com.akamai.miniwsa.application;
 import com.akamai.miniwsa.application.ports.EventQueryRepository;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
+import com.akamai.miniwsa.application.query.TimeSeriesBucket;
+import com.akamai.miniwsa.application.query.TimeSeriesQuery;
+import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,5 +24,9 @@ public class StatsService {
 
     public SummaryStats summary(SummaryQuery query) {
         return queryRepository.getSummary(query);
+    }
+
+    public List<TimeSeriesBucket> timeSeries(TimeSeriesQuery query) {
+        return queryRepository.getTimeSeries(query);
     }
 }

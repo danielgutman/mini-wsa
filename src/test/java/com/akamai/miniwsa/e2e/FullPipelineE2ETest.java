@@ -119,6 +119,15 @@ class FullPipelineE2ETest {
         JsonNode categoryPage = getJson("/v1/events/samples?configId=" + CONFIG_ID
                 + "&from=" + WINDOW_FROM + "&to=" + WINDOW_TO + "&category=" + category + "&limit=1");
         assertThat(categoryPage.get("total").asLong()).isEqualTo(summaryCount);
+
+        // 6) Time series: bucket counts over the window sum back to the total.
+        JsonNode series = getJson("/v1/stats/timeseries?configId=" + CONFIG_ID
+                + "&from=" + WINDOW_FROM + "&to=" + WINDOW_TO + "&interval=1h");
+        long bucketed = 0;
+        for (JsonNode bucket : series.get("buckets")) {
+            bucketed += bucket.get("count").asLong();
+        }
+        assertThat(bucketed).isEqualTo(total);
     }
 
     private int ingest(List<SecurityEvent> chunk) throws Exception {

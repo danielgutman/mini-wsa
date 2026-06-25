@@ -2,10 +2,13 @@ package com.akamai.miniwsa.infrastructure.clickhouse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.akamai.miniwsa.application.query.Interval;
 import com.akamai.miniwsa.application.query.SamplePage;
 import com.akamai.miniwsa.application.query.SamplesQuery;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
+import com.akamai.miniwsa.application.query.TimeSeriesBucket;
+import com.akamai.miniwsa.application.query.TimeSeriesQuery;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -69,7 +72,9 @@ class ClickHouseEventRepositoryTest {
 
         repository.saveAll(List.of(injection, bot));
 
-        Long total = jdbcTemplate.queryForObject("SELECT count() FROM security_events", Long.class);
+        // Scope the count to this test's own events — the container is shared across tests.
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count() FROM security_events WHERE event_id IN ('evt-1', 'evt-2')", Long.class);
         assertThat(total).isEqualTo(2L);
 
         var row = jdbcTemplate.queryForMap(
@@ -131,6 +136,25 @@ class ClickHouseEventRepositoryTest {
         assertThat(filtered.total()).isEqualTo(2);
         assertThat(filtered.items()).allSatisfy(e ->
                 assertThat(e.event().rule().category()).isEqualTo(RuleCategory.INJECTION));
+    }
+
+    @Test
+    void getTimeSeriesBucketsCountsByIntervalWithGapsFilled() {
+        long configId = 557L;
+        // Two events in the first minute, one in the third minute; second minute is empty.
+        repository.saveAll(List.of(
+                summaryEvent("ts-1", "1.1.1.1", "/x", RuleCategory.BOT, Action.MONITOR, 10, configId, "2026-05-20T10:00:10Z"),
+                summaryEvent("ts-2", "1.1.1.1", "/x", RuleCategory.BOT, Action.MONITOR, 10, configId, "2026-05-20T10:00:40Z"),
+                summaryEvent("ts-3", "2.2.2.2", "/x", RuleCategory.BOT, Action.MONITOR, 10, configId, "2026-05-20T10:02:30Z")));
+
+        List<TimeSeriesBucket> buckets = repository.getTimeSeries(new TimeSeriesQuery(
+                configId, Instant.parse("2026-05-20T10:00:00Z"), Instant.parse("2026-05-20T10:03:00Z"), Interval.ONE_MINUTE));
+
+        assertThat(buckets).hasSize(3);
+        assertThat(buckets.get(0).from()).isEqualTo(Instant.parse("2026-05-20T10:00:00Z"));
+        assertThat(buckets.get(0).count()).isEqualTo(2);
+        assertThat(buckets.get(1).count()).isZero();  // empty bucket filled
+        assertThat(buckets.get(2).count()).isEqualTo(1);
     }
 
     private static EnrichedSecurityEvent summaryEvent(String id, String ip, String path, RuleCategory category,
