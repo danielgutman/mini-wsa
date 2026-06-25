@@ -11,7 +11,7 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
+    <groupId>com.akamai</groupId>
     <artifactId>mini-wsa</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>mini-wsa</name>
