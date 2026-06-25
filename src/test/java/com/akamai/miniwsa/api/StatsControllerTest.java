@@ -69,6 +69,47 @@ class StatsControllerTest {
     }
 
     @Test
+    void bucketsEventsByInterval() throws Exception {
+        // 3 events at 10:00, 10:05, 10:10 under a dedicated config; 5m buckets -> 1 each.
+        String batch = """
+                [
+                  {"eventId":"t1","timestamp":"2026-05-20T10:00:00Z","configId":779001,"clientIp":"1.1.1.1",
+                   "path":"/x","method":"GET","statusCode":200,"rule":{"id":"1","severity":"LOW","category":"BOT"},"action":"MONITOR"},
+                  {"eventId":"t2","timestamp":"2026-05-20T10:05:00Z","configId":779001,"clientIp":"1.1.1.1",
+                   "path":"/x","method":"GET","statusCode":200,"rule":{"id":"1","severity":"LOW","category":"BOT"},"action":"MONITOR"},
+                  {"eventId":"t3","timestamp":"2026-05-20T10:10:00Z","configId":779001,"clientIp":"1.1.1.1",
+                   "path":"/x","method":"GET","statusCode":200,"rule":{"id":"1","severity":"LOW","category":"BOT"},"action":"MONITOR"}
+                ]
+                """;
+        mockMvc.perform(post("/v1/events/ingest").contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/v1/stats/timeseries")
+                        .param("configId", "779001")
+                        .param("from", "2026-05-20T10:00:00Z")
+                        .param("to", "2026-05-20T10:15:00Z")
+                        .param("interval", "5m"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.configId").value(779001))
+                .andExpect(jsonPath("$.interval").value("5m"))
+                .andExpect(jsonPath("$.buckets.length()").value(3))
+                .andExpect(jsonPath("$.buckets[0].from").value("2026-05-20T10:00:00Z"))
+                .andExpect(jsonPath("$.buckets[0].to").value("2026-05-20T10:05:00Z"))
+                .andExpect(jsonPath("$.buckets[0].count").value(1))
+                .andExpect(jsonPath("$.buckets[1].count").value(1))
+                .andExpect(jsonPath("$.buckets[2].count").value(1));
+    }
+
+    @Test
+    void rejectsInvalidInterval() throws Exception {
+        mockMvc.perform(get("/v1/stats/timeseries")
+                        .param("from", "2026-05-20T10:00:00Z")
+                        .param("to", "2026-05-20T11:00:00Z")
+                        .param("interval", "2m"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsInvalidTimeRange() throws Exception {
         mockMvc.perform(get("/v1/stats/summary")
                         .param("from", "2026-05-21T00:00:00Z")

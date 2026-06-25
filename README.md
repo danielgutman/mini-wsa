@@ -182,6 +182,28 @@ curl "http://localhost:8080/v1/events/samples?configId=14227&category=INJECTION&
 }
 ```
 
+### Time series — `GET /v1/stats/timeseries`
+
+Event counts bucketed by `interval` (`1m` | `5m` | `1h`) over `[from, to)`, ready to plot.
+`from`/`to`/`interval` are required; `configId` optional. Buckets are contiguous and
+interval-aligned (empty buckets reported with count 0); a bad `interval` → `400`.
+
+```bash
+curl "http://localhost:8080/v1/stats/timeseries?configId=14227\
+&from=2026-05-20T00:00:00Z&to=2026-05-20T01:00:00Z&interval=5m"
+```
+
+```json
+{
+  "configId": 14227,
+  "interval": "5m",
+  "buckets": [
+    { "from": "2026-05-20T00:00:00Z", "to": "2026-05-20T00:05:00Z", "count": 42 },
+    { "from": "2026-05-20T00:05:00Z", "to": "2026-05-20T00:10:00Z", "count": 0 }
+  ]
+}
+```
+
 ## Generating test data
 
 A **seeded** generator produces realistic events plus **attack waves** (bursts from one IP
@@ -233,7 +255,7 @@ docker compose down -v
 
 ## Releasing
 
-Versions come from `pom.xml` — nothing is typed by hand. Developer **milestones** are
+Versions come from `pom.xml`. Developer **milestones** are
 manual `vX.Y-something` tags (e.g. `v0.3-stats`) and trigger nothing. A **release** is the
 `Release` workflow (`workflow_dispatch`): it runs the full-pipeline E2E gate, and **only on
 success** reads the pom version and creates the `vX.Y.Z` tag + GitHub Release. Cut `v1.0.0`
