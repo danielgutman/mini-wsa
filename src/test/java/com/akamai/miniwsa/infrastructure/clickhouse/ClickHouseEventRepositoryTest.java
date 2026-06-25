@@ -2,6 +2,8 @@ package com.akamai.miniwsa.infrastructure.clickhouse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.akamai.miniwsa.application.query.SummaryQuery;
+import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -76,6 +78,39 @@ class ClickHouseEventRepositoryTest {
         assertThat(row.get("action")).isEqualTo("DENY");
         assertThat(row.get("attack_type")).isEqualTo("SQL/Command Injection");
         assertThat(((Number) row.get("threat_score")).intValue()).isEqualTo(90);
+    }
+
+    @Test
+    void getSummaryAggregatesByConfig() {
+        // Use a dedicated configId so this test is isolated from other tests' rows in the
+        // shared container, then filter the summary by that config.
+        long configId = 555L;
+        repository.saveAll(List.of(
+                summaryEvent("sum-1", "1.1.1.1", "/login", RuleCategory.INJECTION, Action.DENY, 90, configId, "2026-05-20T10:00:00Z"),
+                summaryEvent("sum-2", "1.1.1.1", "/login", RuleCategory.INJECTION, Action.DENY, 90, configId, "2026-05-20T10:01:00Z"),
+                summaryEvent("sum-3", "2.2.2.2", "/x", RuleCategory.BOT, Action.ALERT, 55, configId, "2026-05-20T10:02:00Z")));
+
+        SummaryStats stats = repository.getSummary(new SummaryQuery(
+                configId, Instant.parse("2026-05-20T00:00:00Z"), Instant.parse("2026-05-21T00:00:00Z")));
+
+        assertThat(stats.totalEvents()).isEqualTo(3);
+        assertThat(stats.byCategory().get("INJECTION").count()).isEqualTo(2);
+        assertThat(stats.byCategory().get("INJECTION").avgThreatScore()).isEqualTo(90.0);
+        assertThat(stats.byAction().get("DENY")).isEqualTo(2);
+        assertThat(stats.byAction().get("ALERT")).isEqualTo(1);
+        assertThat(stats.topAttackers().getFirst().clientIp()).isEqualTo("1.1.1.1");
+        assertThat(stats.topAttackers().getFirst().count()).isEqualTo(2);
+        assertThat(stats.topTargetedPaths().getFirst().path()).isEqualTo("/login");
+        assertThat(stats.topTargetedPaths().getFirst().count()).isEqualTo(2);
+    }
+
+    private static EnrichedSecurityEvent summaryEvent(String id, String ip, String path, RuleCategory category,
+                                                      Action action, int threatScore, long configId, String timestamp) {
+        Rule rule = new Rule("r", "R", "m", Severity.HIGH, category);
+        SecurityEvent event = new SecurityEvent(
+                id, Instant.parse(timestamp), configId, "pol", ip, "host", path, "GET", 200, "ua",
+                rule, action, new GeoLocation("US", "NY"), 10L, 20L);
+        return new EnrichedSecurityEvent(event, "attack", threatScore, Instant.parse("2026-05-20T14:32:11Z"));
     }
 
     private static EnrichedSecurityEvent enriched(String id, String ip, String path,

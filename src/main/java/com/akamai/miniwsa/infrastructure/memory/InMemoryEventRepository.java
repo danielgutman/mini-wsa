@@ -1,22 +1,37 @@
 package com.akamai.miniwsa.infrastructure.memory;
 
+import static java.util.stream.Collectors.counting;
+import static java.util.stream.Collectors.groupingBy;
+
+import com.akamai.miniwsa.application.ports.EventQueryRepository;
 import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
+import com.akamai.miniwsa.application.query.SummaryQuery;
+import com.akamai.miniwsa.application.query.SummaryStats;
+import com.akamai.miniwsa.application.query.SummaryStats.AttackerStats;
+import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
+import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * In-memory {@link EventWriteRepository}/{@link EventReadRepository} adapter. Lets the
- * service run and be integration-tested without a live ClickHouse; it is the default
- * storage until the ClickHouse adapter is selected via {@code miniwsa.storage}.
+ * In-memory adapter implementing the write/read/query ports. Lets the service run and be
+ * integration-tested without a live ClickHouse; it is the default storage until the
+ * ClickHouse adapter is selected via {@code miniwsa.storage}.
  */
 @Repository
 @ConditionalOnProperty(name = "miniwsa.storage", havingValue = "memory", matchIfMissing = true)
-public class InMemoryEventRepository implements EventWriteRepository, EventReadRepository {
+public class InMemoryEventRepository
+        implements EventWriteRepository, EventReadRepository, EventQueryRepository {
+
+    private static final int TOP_N = 10;
 
     private final List<EnrichedSecurityEvent> store = new CopyOnWriteArrayList<>();
 
@@ -32,6 +47,53 @@ public class InMemoryEventRepository implements EventWriteRepository, EventReadR
                 .map(enriched -> enriched.event().timestamp())
                 .filter(timestamp -> !timestamp.isBefore(fromInclusive) && timestamp.isBefore(toExclusive))
                 .count();
+    }
+
+    @Override
+    public SummaryStats getSummary(SummaryQuery query) {
+        List<EnrichedSecurityEvent> matching = store.stream()
+                .filter(enriched -> matches(enriched, query))
+                .toList();
+
+        Map<String, CategoryStats> byCategory = new LinkedHashMap<>();
+        matching.stream()
+                .collect(groupingBy(e -> e.event().rule().category().name()))
+                .forEach((category, events) ->
+                        byCategory.put(category, new CategoryStats(events.size(), avgThreatScore(events))));
+
+        Map<String, Long> byAction = matching.stream()
+                .collect(groupingBy(e -> e.event().action().name(), counting()));
+
+        List<AttackerStats> topAttackers = matching.stream()
+                .collect(groupingBy(e -> e.event().clientIp()))
+                .entrySet().stream()
+                .map(entry -> new AttackerStats(entry.getKey(), entry.getValue().size(), avgThreatScore(entry.getValue())))
+                .sorted(Comparator.comparingLong(AttackerStats::count).reversed())
+                .limit(TOP_N)
+                .toList();
+
+        List<PathStats> topTargetedPaths = matching.stream()
+                .collect(groupingBy(e -> e.event().path(), counting()))
+                .entrySet().stream()
+                .map(entry -> new PathStats(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparingLong(PathStats::count).reversed())
+                .limit(TOP_N)
+                .toList();
+
+        return new SummaryStats(matching.size(), byCategory, byAction, topAttackers, topTargetedPaths);
+    }
+
+    private static boolean matches(EnrichedSecurityEvent enriched, SummaryQuery query) {
+        Instant timestamp = enriched.event().timestamp();
+        if (timestamp.isBefore(query.from()) || !timestamp.isBefore(query.to())) {
+            return false;
+        }
+        return query.configId() == null || query.configId() == enriched.event().configId();
+    }
+
+    private static double avgThreatScore(List<EnrichedSecurityEvent> events) {
+        double avg = events.stream().mapToInt(EnrichedSecurityEvent::threatScore).average().orElse(0);
+        return Math.round(avg * 10) / 10.0;
     }
 
     /** Snapshot of stored events, for tests and (temporarily) local inspection. */
