@@ -35,15 +35,30 @@ curl http://localhost:8080/actuator/health
 # -> {"status":"UP",...}
 ```
 
-## Local ClickHouse
+## Storage
+
+Storage is selected by `miniwsa.storage`:
+
+- `memory` (default) — in-memory adapter; the app runs and is testable without any DB.
+- `clickhouse` — persists to ClickHouse over JDBC.
+
+### Local ClickHouse
 
 ```bash
 docker compose up -d clickhouse
 ```
 
-This starts a single-node ClickHouse and applies the schema in
-`src/main/resources/db/ClickHouseSchema.sql` on first start. The app does not yet
-connect to it (Phase 4).
+This starts a single-node ClickHouse and applies `src/main/resources/db/ClickHouseSchema.sql`
+on first start (creating `mini_wsa.security_events`). Run the app against it with:
+
+```bash
+MINIWSA_STORAGE=clickhouse ./mvnw spring-boot:run
+# connection defaults: jdbc:clickhouse://localhost:8123/mini_wsa, user/pass mini_wsa
+```
+
+The ClickHouse adapter is integration-tested with Testcontainers
+(`ClickHouseEventRepositoryTest`); that test is skipped automatically when Docker is
+unavailable and runs in CI.
 
 ## Architecture
 
