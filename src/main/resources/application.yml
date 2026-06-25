@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: mini-wsa
+
+server:
+  port: 8080
+
+# Actuator exposes a health endpoint for liveness checks and local verification.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.example.miniwsa: DEBUG
