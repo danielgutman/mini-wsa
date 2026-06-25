@@ -3,6 +3,7 @@ package com.akamai.miniwsa.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.akamai.miniwsa.application.ports.ClockProvider;
+import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
@@ -10,15 +11,18 @@ import com.akamai.miniwsa.domain.enums.Severity;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.Rule;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
+import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
+import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link EventIngestionService}: it stamps {@code receivedAt} from
- * the {@link ClockProvider} and persists via {@link EventWriteRepository}, for both
- * single and batch input. Enrichment assertions are added when that step is wired.
+ * Unit tests for {@link EventIngestionService}: it stamps {@code receivedAt} from the
+ * {@link ClockProvider}, enriches each event (attack type + threat score, using the
+ * repeat-offender count from {@link EventReadRepository}), and persists via
+ * {@link EventWriteRepository}, for both single and batch input.
  */
 class EventIngestionServiceTest {
 
@@ -26,16 +30,30 @@ class EventIngestionServiceTest {
 
     private final ClockProvider fixedClock = () -> FIXED_NOW;
     private final RecordingRepository repository = new RecordingRepository();
-    private final EventIngestionService service = new EventIngestionService(fixedClock, repository);
+    private final StubReadRepository readRepository = new StubReadRepository();
+    private final EventIngestionService service = new EventIngestionService(
+            fixedClock, repository, readRepository, new AttackTypeClassifier(), new ThreatScoreCalculator());
 
     @Test
-    void ingestsSingleEventAndStampsReceivedAt() {
+    void enrichesSingleEventWithAttackTypeScoreAndReceivedAt() {
+        // CRITICAL(40) + DENY(20) + /login(15), not a repeat offender = 75
         int ingested = service.ingest(List.of(sampleEvent("evt-1")));
 
         assertThat(ingested).isEqualTo(1);
-        assertThat(repository.saved).hasSize(1);
-        assertThat(repository.saved.getFirst().receivedAt()).isEqualTo(FIXED_NOW);
-        assertThat(repository.saved.getFirst().event().eventId()).isEqualTo("evt-1");
+        EnrichedSecurityEvent saved = repository.saved.getFirst();
+        assertThat(saved.receivedAt()).isEqualTo(FIXED_NOW);
+        assertThat(saved.attackType()).isEqualTo("SQL/Command Injection");
+        assertThat(saved.threatScore()).isEqualTo(75);
+    }
+
+    @Test
+    void appliesRepeatOffenderBonusWhenHistoryExceedsThreshold() {
+        readRepository.count = 6; // > 5 within the window
+
+        service.ingest(List.of(sampleEvent("evt-1")));
+
+        // 75 baseline + repeat-offender 15 = 90
+        assertThat(repository.saved.getFirst().threatScore()).isEqualTo(90);
     }
 
     @Test
@@ -83,6 +101,16 @@ class EventIngestionServiceTest {
         @Override
         public void saveAll(List<EnrichedSecurityEvent> events) {
             saved.addAll(events);
+        }
+    }
+
+    /** Fake read repository returning a configurable repeat-offender count. */
+    private static final class StubReadRepository implements EventReadRepository {
+        private long count = 0;
+
+        @Override
+        public long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive) {
+            return count;
         }
     }
 }
