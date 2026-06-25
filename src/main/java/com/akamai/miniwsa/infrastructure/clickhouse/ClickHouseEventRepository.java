@@ -3,15 +3,22 @@ package com.akamai.miniwsa.infrastructure.clickhouse;
 import com.akamai.miniwsa.application.ports.EventQueryRepository;
 import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
+import com.akamai.miniwsa.application.query.SamplePage;
+import com.akamai.miniwsa.application.query.SamplesQuery;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.AttackerStats;
 import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
+import com.akamai.miniwsa.domain.enums.Action;
+import com.akamai.miniwsa.domain.enums.RuleCategory;
+import com.akamai.miniwsa.domain.enums.Severity;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.GeoLocation;
+import com.akamai.miniwsa.domain.model.Rule;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -25,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -131,6 +139,24 @@ public class ClickHouseEventRepository
         return new SummaryStats(total == null ? 0L : total, byCategory, byAction, topAttackers, topTargetedPaths);
     }
 
+    @Override
+    public SamplePage getSamples(SamplesQuery query) {
+        Filter filter = filterFor(query);
+
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count() FROM security_events " + filter.where, Long.class, filter.params);
+
+        List<Object> pagedParams = new ArrayList<>(List.of(filter.params));
+        pagedParams.add(query.limit());
+        pagedParams.add(query.offset());
+
+        List<EnrichedSecurityEvent> items = jdbcTemplate.query(
+                "SELECT * FROM security_events " + filter.where + " ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                SAMPLE_ROW_MAPPER, pagedParams.toArray());
+
+        return new SamplePage(total == null ? 0L : total, query.limit(), query.offset(), items);
+    }
+
     /** Builds the shared WHERE clause and positional parameters for the time range (+ optional config). */
     private static Filter filterFor(SummaryQuery query) {
         StringBuilder where = new StringBuilder("WHERE timestamp >= ? AND timestamp < ?");
@@ -144,7 +170,67 @@ public class ClickHouseEventRepository
         return new Filter(where.toString(), params.toArray());
     }
 
+    /** Builds the WHERE clause for samples, where every filter (including the range) is optional. */
+    private static Filter filterFor(SamplesQuery query) {
+        List<String> conditions = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+        if (query.configId() != null) {
+            conditions.add("config_id = ?");
+            params.add(query.configId());
+        }
+        if (query.from() != null) {
+            conditions.add("timestamp >= ?");
+            params.add(utc(query.from()));
+        }
+        if (query.to() != null) {
+            conditions.add("timestamp < ?");
+            params.add(utc(query.to()));
+        }
+        if (query.category() != null) {
+            conditions.add("rule_category = ?");
+            params.add(query.category().name());
+        }
+        if (query.action() != null) {
+            conditions.add("action = ?");
+            params.add(query.action().name());
+        }
+        String where = conditions.isEmpty() ? "" : "WHERE " + String.join(" AND ", conditions);
+        return new Filter(where, params.toArray());
+    }
+
     private record Filter(String where, Object[] params) {
+    }
+
+    private static final RowMapper<EnrichedSecurityEvent> SAMPLE_ROW_MAPPER = (rs, rowNum) -> {
+        Rule rule = new Rule(
+                rs.getString("rule_id"),
+                rs.getString("rule_name"),
+                rs.getString("rule_message"),
+                Severity.valueOf(rs.getString("rule_severity")),
+                RuleCategory.valueOf(rs.getString("rule_category")));
+        GeoLocation geo = new GeoLocation(rs.getString("geo_country"), rs.getString("geo_city"));
+        SecurityEvent event = new SecurityEvent(
+                rs.getString("event_id"),
+                toInstant(rs, "timestamp"),
+                rs.getLong("config_id"),
+                rs.getString("policy_id"),
+                rs.getString("client_ip"),
+                rs.getString("hostname"),
+                rs.getString("path"),
+                rs.getString("method"),
+                rs.getInt("status_code"),
+                rs.getString("user_agent"),
+                rule,
+                Action.valueOf(rs.getString("action")),
+                geo,
+                rs.getLong("request_size"),
+                rs.getLong("response_size"));
+        return new EnrichedSecurityEvent(
+                event, rs.getString("attack_type"), rs.getInt("threat_score"), toInstant(rs, "received_at"));
+    };
+
+    private static Instant toInstant(ResultSet rs, String column) throws SQLException {
+        return rs.getObject(column, LocalDateTime.class).toInstant(ZoneOffset.UTC);
     }
 
     private static double round(double value) {

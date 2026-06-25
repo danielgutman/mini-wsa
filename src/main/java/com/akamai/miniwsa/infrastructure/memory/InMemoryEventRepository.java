@@ -6,12 +6,15 @@ import static java.util.stream.Collectors.groupingBy;
 import com.akamai.miniwsa.application.ports.EventQueryRepository;
 import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
+import com.akamai.miniwsa.application.query.SamplePage;
+import com.akamai.miniwsa.application.query.SamplesQuery;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.AttackerStats;
 import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
+import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -81,6 +84,38 @@ public class InMemoryEventRepository
                 .toList();
 
         return new SummaryStats(matching.size(), byCategory, byAction, topAttackers, topTargetedPaths);
+    }
+
+    @Override
+    public SamplePage getSamples(SamplesQuery query) {
+        List<EnrichedSecurityEvent> filtered = store.stream()
+                .filter(enriched -> matches(enriched, query))
+                .sorted(Comparator.comparing((EnrichedSecurityEvent e) -> e.event().timestamp()).reversed())
+                .toList();
+
+        int fromIndex = Math.min(query.offset(), filtered.size());
+        int toIndex = Math.min(fromIndex + query.limit(), filtered.size());
+        List<EnrichedSecurityEvent> page = List.copyOf(filtered.subList(fromIndex, toIndex));
+
+        return new SamplePage(filtered.size(), query.limit(), query.offset(), page);
+    }
+
+    private static boolean matches(EnrichedSecurityEvent enriched, SamplesQuery query) {
+        SecurityEvent event = enriched.event();
+        if (query.configId() != null && query.configId() != event.configId()) {
+            return false;
+        }
+        Instant timestamp = event.timestamp();
+        if (query.from() != null && timestamp.isBefore(query.from())) {
+            return false;
+        }
+        if (query.to() != null && !timestamp.isBefore(query.to())) {
+            return false;
+        }
+        if (query.category() != null && event.rule().category() != query.category()) {
+            return false;
+        }
+        return query.action() == null || event.action() == query.action();
     }
 
     private static boolean matches(EnrichedSecurityEvent enriched, SummaryQuery query) {

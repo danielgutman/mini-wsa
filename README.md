@@ -98,6 +98,34 @@ curl "http://localhost:8080/v1/stats/summary?configId=14227\
 }
 ```
 
+### Sample events — `GET /v1/events/samples`
+
+Returns individual enriched events, newest first, with a `total` count for pagination.
+All filters are optional: `configId`, `from`/`to` (ISO-8601), `category`, `action`.
+Pagination: `limit` (default 20, max 100), `offset` (default 0). Invalid pagination →
+`400`.
+
+```bash
+curl "http://localhost:8080/v1/events/samples?configId=14227&category=INJECTION&limit=20&offset=0"
+```
+
+```json
+{
+  "total": 3,
+  "limit": 20,
+  "offset": 0,
+  "items": [
+    {
+      "eventId": "q2", "timestamp": "2026-05-20T10:05:00Z", "configId": 14227,
+      "clientIp": "203.0.113.42", "path": "/login",
+      "rule": { "severity": "HIGH", "category": "INJECTION" },
+      "action": "DENY", "attackType": "SQL/Command Injection",
+      "threatScore": 65, "receivedAt": "2026-05-20T10:05:01Z"
+    }
+  ]
+}
+```
+
 ## Architecture
 
 Clean / hexagonal layering — the domain stays free of Spring, HTTP, and JDBC:
