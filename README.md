@@ -60,6 +60,44 @@ The ClickHouse adapter is integration-tested with Testcontainers
 (`ClickHouseEventRepositoryTest`); that test is skipped automatically when Docker is
 unavailable and runs in CI.
 
+## API
+
+### Ingest events — `POST /v1/events/ingest`
+
+Accepts a single event object or a JSON array. Returns `201 {"ingested": N}`; invalid
+input returns `400` (RFC 7807 ProblemDetail with an `errors` array).
+
+```bash
+curl -X POST http://localhost:8080/v1/events/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"evt-001","timestamp":"2026-05-20T14:32:10Z","configId":14227,
+       "clientIp":"203.0.113.42","path":"/api/v1/login","method":"POST","statusCode":403,
+       "rule":{"id":"950001","severity":"CRITICAL","category":"INJECTION"},"action":"DENY"}'
+```
+
+### Summary statistics — `GET /v1/stats/summary`
+
+Query params: `from`, `to` (required, ISO-8601), `configId` (optional — omit to aggregate
+across all configs). Returns totals, per-category (count + avg threat score), per-action
+counts, and the top-10 attackers and targeted paths.
+
+```bash
+curl "http://localhost:8080/v1/stats/summary?configId=14227\
+&from=2026-05-20T00:00:00Z&to=2026-05-21T00:00:00Z"
+```
+
+```json
+{
+  "configId": 14227,
+  "timeRange": { "from": "2026-05-20T00:00:00Z", "to": "2026-05-21T00:00:00Z" },
+  "totalEvents": 3,
+  "byCategory": { "INJECTION": { "count": 2, "avgThreatScore": 75.0 } },
+  "byAction": { "DENY": 2, "MONITOR": 1 },
+  "topAttackers": [ { "clientIp": "203.0.113.42", "count": 2, "avgThreatScore": 75.0 } ],
+  "topTargetedPaths": [ { "path": "/login", "count": 2 } ]
+}
+```
+
 ## Architecture
 
 Clean / hexagonal layering — the domain stays free of Spring, HTTP, and JDBC:
