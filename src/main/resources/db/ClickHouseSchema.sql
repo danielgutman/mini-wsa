@@ -9,7 +9,7 @@
 --   * received_at  = server-side ingestion time.
 --   * LowCardinality(String) compresses repeated categorical values.
 --   * ORDER BY supports time-range queries per config and attacker lookups.
-CREATE TABLE IF NOT EXISTS security_events
+CREATE TABLE IF NOT EXISTS mini_wsa.security_events
 (
     event_id        String,
     timestamp       DateTime64(3, 'UTC'),

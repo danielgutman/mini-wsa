@@ -5,6 +5,15 @@ spring:
 server:
   port: 8080
 
+# Storage selection: "memory" (default, in-memory adapter) or "clickhouse".
+# ClickHouse connection is only used when miniwsa.storage=clickhouse.
+miniwsa:
+  storage: ${MINIWSA_STORAGE:memory}
+  clickhouse:
+    url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/mini_wsa}
+    username: ${CLICKHOUSE_USER:mini_wsa}
+    password: ${CLICKHOUSE_PASSWORD:mini_wsa}
+
 # Actuator exposes a health endpoint for liveness checks and local verification.
 management:
   endpoints:
@@ -18,4 +27,4 @@ management:
 logging:
   level:
     root: INFO
-    com.example.miniwsa: DEBUG
+    com.akamai.miniwsa: DEBUG
