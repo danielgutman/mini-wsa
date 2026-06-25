@@ -1,4 +1,4 @@
-package com.example.miniwsa;
+package com.akamai.miniwsa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,4 +1,4 @@
-package com.example.miniwsa;
+package com.akamai.miniwsa;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

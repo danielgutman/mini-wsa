@@ -1,4 +1,4 @@
-package com.example.miniwsa.api;
+package com.akamai.miniwsa.api;
 
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
