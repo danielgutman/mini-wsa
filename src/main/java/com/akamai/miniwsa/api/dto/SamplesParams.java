@@ -1,0 +1,30 @@
+package com.akamai.miniwsa.api.dto;
+
+import com.akamai.miniwsa.domain.enums.Action;
+import com.akamai.miniwsa.domain.enums.RuleCategory;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Min;
+import java.time.Instant;
+import org.springframework.format.annotation.DateTimeFormat;
+
+/**
+ * Bound and validated query parameters for {@code GET /v1/events/samples}. All filters are
+ * optional. Pagination floors are enforced by Bean Validation ({@code limit >= 1},
+ * {@code offset >= 0}); the max-limit clamp and defaulting are transformations applied by
+ * the service. Validation is raised by the framework — no throwing in our code.
+ */
+public record SamplesParams(
+        Long configId,
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+        RuleCategory category,
+        Action action,
+        @Min(value = 1, message = "limit must be >= 1") Integer limit,
+        @Min(value = 0, message = "offset must be >= 0") Integer offset
+) {
+
+    @AssertTrue(message = "'to' must be after 'from'")
+    public boolean isRangeOrdered() {
+        return from == null || to == null || to.isAfter(from);
+    }
+}

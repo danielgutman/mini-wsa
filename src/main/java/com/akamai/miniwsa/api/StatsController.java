@@ -1,20 +1,20 @@
 package com.akamai.miniwsa.api;
 
+import com.akamai.miniwsa.api.dto.SummaryParams;
 import com.akamai.miniwsa.api.dto.SummaryResponse;
 import com.akamai.miniwsa.application.StatsService;
 import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
-import java.time.Instant;
-import org.springframework.format.annotation.DateTimeFormat;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Statistics endpoints. Thin: parses query params and delegates to {@link StatsService}.
- * {@code from}/{@code to} are required ISO-8601 instants; {@code configId} is optional.
- * Bad or missing params surface as 400s via the central error handler.
+ * Statistics endpoints. Thin: binds {@code @Valid} query params and delegates to
+ * {@link StatsService}. Missing/invalid params (required {@code from}/{@code to}, bad
+ * timestamps, {@code to} not after {@code from}) are raised by Bean Validation and rendered
+ * as 400s by the central error handler — the controller never throws.
  */
 @RestController
 @RequestMapping("/v1/stats")
@@ -27,11 +27,9 @@ public class StatsController {
     }
 
     @GetMapping("/summary")
-    public SummaryResponse summary(
-            @RequestParam(required = false) Long configId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        SummaryStats stats = statsService.summary(new SummaryQuery(configId, from, to));
-        return SummaryResponse.from(configId, from, to, stats);
+    public SummaryResponse summary(@Valid SummaryParams params) {
+        SummaryStats stats = statsService.summary(
+                new SummaryQuery(params.configId(), params.from(), params.to()));
+        return SummaryResponse.from(params.configId(), params.from(), params.to(), stats);
     }
 }

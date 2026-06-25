@@ -66,15 +66,21 @@ public class ErrorHandlingAdvice extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, body, headers, status, request);
     }
 
-    /** Validation of a single {@code @Valid} request body bean (kept for completeness). */
+    /**
+     * Validation of {@code @Valid} beans/param objects (request body, or bound query params
+     * such as the stats/samples params). Includes field errors and class-level
+     * ({@code @AssertTrue}) global errors, e.g. "'to' must be after 'from'".
+     */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
                                                                   HttpHeaders headers,
                                                                   HttpStatusCode status,
                                                                   WebRequest request) {
-        List<FieldErrorDetail> errors = ex.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> new FieldErrorDetail(fieldError.getField(), message(fieldError.getDefaultMessage())))
-                .toList();
+        List<FieldErrorDetail> errors = new ArrayList<>();
+        ex.getBindingResult().getFieldErrors().forEach(fieldError ->
+                errors.add(new FieldErrorDetail(fieldError.getField(), message(fieldError.getDefaultMessage()))));
+        ex.getBindingResult().getGlobalErrors().forEach(globalError ->
+                errors.add(new FieldErrorDetail(globalError.getObjectName(), message(globalError.getDefaultMessage()))));
 
         ProblemDetail body = ex.getBody();
         body.setDetail("Request validation failed");
