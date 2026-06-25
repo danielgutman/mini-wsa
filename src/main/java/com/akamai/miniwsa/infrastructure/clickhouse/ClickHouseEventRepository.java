@@ -1,5 +1,6 @@
 package com.akamai.miniwsa.infrastructure.clickhouse;
 
+import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.GeoLocation;
@@ -28,9 +29,12 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 @ConditionalOnProperty(name = "miniwsa.storage", havingValue = "clickhouse")
-public class ClickHouseEventRepository implements EventWriteRepository {
+public class ClickHouseEventRepository implements EventWriteRepository, EventReadRepository {
 
     private static final Logger log = LoggerFactory.getLogger(ClickHouseEventRepository.class);
+
+    private static final String COUNT_BY_IP_SQL =
+            "SELECT count() FROM security_events WHERE client_ip = ? AND timestamp >= ? AND timestamp < ?";
 
     private static final String INSERT_SQL = """
             INSERT INTO security_events (
@@ -65,6 +69,13 @@ public class ClickHouseEventRepository implements EventWriteRepository {
             }
         });
         log.debug("Persisted {} event(s) to ClickHouse", events.size());
+    }
+
+    @Override
+    public long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive) {
+        Long count = jdbcTemplate.queryForObject(
+                COUNT_BY_IP_SQL, Long.class, clientIp, utc(fromInclusive), utc(toExclusive));
+        return count == null ? 0L : count;
     }
 
     private static void bind(PreparedStatement ps, EnrichedSecurityEvent enriched) throws SQLException {
