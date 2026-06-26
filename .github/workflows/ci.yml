@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-and-test:
+    name: Build & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +21,33 @@ jobs:
 
       - name: Build and run tests
         run: ./mvnw --batch-mode --no-transfer-progress verify
+
+  docker-stack:
+    name: Docker compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the full stack
+        run: docker compose up --build -d
+
+      - name: Smoke-test through the nginx edge
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ping || true)
+            if [ "$code" = "200" ]; then echo "stack ready"; break; fi
+            sleep 3
+          done
+          # liveness + a real ingest through edge -> app -> clickhouse
+          curl -fsS http://localhost:8080/ping
+          curl -fsS -X POST http://localhost:8080/v1/events/ingest \
+            -H "Content-Type: application/json" \
+            -d '{"eventId":"ci-1","timestamp":"2026-05-20T10:00:00Z","configId":1,"clientIp":"1.1.1.1","path":"/x","method":"GET","statusCode":200,"rule":{"id":"1","severity":"LOW","category":"BOT"},"action":"MONITOR"}'
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

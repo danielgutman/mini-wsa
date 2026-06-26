@@ -23,6 +23,9 @@ provides the adapters; `api` is thin (controllers + DTOs, with one central error
             Client / Generator
                    │  HTTP (JSON)
                    ▼
+   edge         nginx (optional) — request-size limit (413), reverse proxy
+                   │
+                   ▼
    api          Controllers ──► ErrorHandlingAdvice (RFC 7807 ProblemDetail)
                    │  DTOs ⇄ domain
                    ▼
@@ -100,19 +103,30 @@ curl http://localhost:8080/ping              # {"status":"ok","service":"mini-ws
 curl http://localhost:8080/actuator/health   # {"status":"UP",...}
 ```
 
-### Running against ClickHouse
+### Full stack with Docker (app + ClickHouse + edge)
+
+Brings up everything — ClickHouse, the app (in ClickHouse mode), and an **nginx edge proxy**
+that enforces the request-size limit — with one command:
 
 ```bash
-# Start a local ClickHouse (applies src/main/resources/db/ClickHouseSchema.sql on first run,
-# creating mini_wsa.security_events)
-docker compose up -d clickhouse
+docker compose up --build           # nginx :8080 → app → ClickHouse
+curl http://localhost:8080/ping     # through the edge
+docker compose down -v              # stop + wipe data
+```
 
-# Point the app at it
+Traffic flows `client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
+request bodies (`client_max_body_size 8m`) and returns **413** for oversized payloads before
+they reach the app — defense-in-depth alongside the app's 10k-event `@Size` cap (which returns
+a JSON **400**). ClickHouse's schema is auto-applied on first start.
+
+### App-only against ClickHouse (local dev)
+
+```bash
+docker compose up -d clickhouse     # just the database
 MINIWSA_STORAGE=clickhouse ./mvnw spring-boot:run
 # defaults: jdbc:clickhouse://localhost:8123/mini_wsa, user/pass mini_wsa
 # overridable via CLICKHOUSE_URL / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
-
-docker compose down -v   # stop + wipe data
+docker compose down -v
 ```
 
 ## API documentation
@@ -293,9 +307,11 @@ by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
   the cap is kept as defensive logic.
-- A single ingest request is capped at 10,000 events (beyond that → 400); clients should
-  chunk larger loads. The array is still fully deserialized before the size check, so a
-  hard request-body-size limit would be the next step for untrusted input.
+- A single ingest request is capped at 10,000 events (beyond that → app returns 400); clients
+  should chunk larger loads. The app-level check deserializes the array first, so the
+  byte-level guard is the **edge** (`docker compose` runs nginx with `client_max_body_size`,
+  returning 413 before the app reads the body); in production that limit lives at the
+  gateway/Akamai edge.
 
 ## Milestones
 

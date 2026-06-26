@@ -50,9 +50,17 @@ jobs:
           CLICKHOUSE_PASSWORD: mini_wsa
         run: ./mvnw --batch-mode --no-transfer-progress -Dtest=FullPipelineE2ETest test
 
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the full-stack images
+        run: docker compose build
+
   release:
     name: Create GitHub Release
-    needs: e2e   # release only happens if the E2E job succeeded
+    needs: [e2e, docker-build]   # release only if the E2E passed AND the images build
     runs-on: ubuntu-latest
     permissions:
       contents: write

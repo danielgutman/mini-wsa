@@ -1,6 +1,10 @@
-# Local ClickHouse for development. Brings up a single-node ClickHouse server.
-# The schema in infrastructure/clickhouse/ClickHouseSchema.sql is applied on first
-# start via the docker-entrypoint-initdb.d mount.
+# Full stack: `docker compose up --build` brings up ClickHouse, the app (in ClickHouse
+# mode), and an nginx edge proxy that enforces the request-size limit.
+#
+#   client ──► edge (nginx :8080) ──► app (:8080) ──► clickhouse (:8123)
+#
+# For app-only local dev you can instead run `docker compose up -d clickhouse` and start
+# the app with `./mvnw spring-boot:run` (see README).
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
@@ -25,6 +29,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  app:
+    build: .
+    container_name: mini-wsa-app
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      MINIWSA_STORAGE: clickhouse
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/mini_wsa
+      CLICKHOUSE_USER: mini_wsa
+      CLICKHOUSE_PASSWORD: mini_wsa
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  edge:
+    image: nginx:1.27-alpine
+    container_name: mini-wsa-edge
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "8080:80"   # host 8080 -> nginx -> app
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   clickhouse-data:
