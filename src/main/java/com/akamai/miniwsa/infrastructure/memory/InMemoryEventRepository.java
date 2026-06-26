@@ -19,10 +19,14 @@ import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -47,12 +51,19 @@ public class InMemoryEventRepository
     }
 
     @Override
-    public long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive) {
-        return store.stream()
-                .filter(enriched -> enriched.event().clientIp().equals(clientIp))
-                .map(enriched -> enriched.event().timestamp())
-                .filter(timestamp -> !timestamp.isBefore(fromInclusive) && timestamp.isBefore(toExclusive))
-                .count();
+    public Map<String, List<Instant>> findEventTimestampsByClientIp(
+            Collection<String> clientIps, Instant fromInclusive, Instant toExclusive) {
+        Set<String> wanted = new HashSet<>(clientIps);
+        Map<String, List<Instant>> timestampsByIp = new HashMap<>();
+        for (EnrichedSecurityEvent enriched : store) {
+            String clientIp = enriched.event().clientIp();
+            Instant timestamp = enriched.event().timestamp();
+            if (wanted.contains(clientIp)
+                    && !timestamp.isBefore(fromInclusive) && timestamp.isBefore(toExclusive)) {
+                timestampsByIp.computeIfAbsent(clientIp, key -> new ArrayList<>()).add(timestamp);
+            }
+        }
+        return timestampsByIp;
     }
 
     @Override

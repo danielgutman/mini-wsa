@@ -1,5 +1,7 @@
 package com.akamai.miniwsa.application;
 
+import static java.util.stream.Collectors.toSet;
+
 import com.akamai.miniwsa.application.ports.ClockProvider;
 import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
@@ -9,19 +11,23 @@ import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
 import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * Orchestrates ingestion and enrichment of security events: stamps a server-side
- * {@code receivedAt}, classifies the attack type, computes the threat score (including
- * the repeat-offender signal), then persists. Accepts both single and batch input.
+ * {@code receivedAt}, classifies the attack type, computes the threat score (including the
+ * repeat-offender signal), then persists. Accepts both single and batch input.
  *
- * <p>This is where IO and pure logic meet: the repeat-offender count is an effect
- * (a read query), so it is performed here and passed as a boolean into the pure
- * {@link ThreatScoreCalculator} (IO policy §5).
+ * <p>Repeat-offender history is loaded with a <b>single</b> query per batch (not one per
+ * event), then the per-event 10-minute windowed count is done in pure code — so a large
+ * batch is not N+1 on the database. The query is the only IO; the pure
+ * {@link ThreatScoreCalculator} just receives a boolean (IO policy §5).
  */
 @Service
 public class EventIngestionService {
@@ -58,9 +64,10 @@ public class EventIngestionService {
      */
     public int ingest(List<SecurityEvent> events) {
         Instant receivedAt = clock.now();
+        Map<String, List<Instant>> historyByIp = loadRepeatOffenderHistory(events);
 
         List<EnrichedSecurityEvent> enriched = events.stream()
-                .map(event -> enrich(event, receivedAt))
+                .map(event -> enrich(event, receivedAt, historyByIp))
                 .toList();
 
         writeRepository.saveAll(enriched);
@@ -68,23 +75,41 @@ public class EventIngestionService {
         return enriched.size();
     }
 
-    private EnrichedSecurityEvent enrich(SecurityEvent event, Instant receivedAt) {
+    /**
+     * Loads, in one query, the prior-event timestamps for every client IP in the batch over
+     * the union of the per-event repeat-offender windows ({@code [minTimestamp - 10min,
+     * maxTimestamp)}). Within-batch events are not included — they are not persisted yet.
+     */
+    private Map<String, List<Instant>> loadRepeatOffenderHistory(List<SecurityEvent> events) {
+        if (events.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> clientIps = events.stream().map(SecurityEvent::clientIp).collect(toSet());
+        Instant maxTimestamp = events.stream().map(SecurityEvent::timestamp).max(Comparator.naturalOrder()).orElseThrow();
+        Instant windowStart = events.stream().map(SecurityEvent::timestamp).min(Comparator.naturalOrder())
+                .orElseThrow().minus(REPEAT_OFFENDER_WINDOW);
+        return readRepository.findEventTimestampsByClientIp(clientIps, windowStart, maxTimestamp);
+    }
+
+    private EnrichedSecurityEvent enrich(SecurityEvent event, Instant receivedAt,
+                                         Map<String, List<Instant>> historyByIp) {
         String attackType = attackTypeClassifier.classify(event.rule().category());
-        boolean repeatOffender = isRepeatOffender(event);
+        boolean repeatOffender = isRepeatOffender(event, historyByIp);
         int threatScore = threatScoreCalculator.calculate(
                 event.rule().severity(), event.action(), event.path(), repeatOffender);
         return new EnrichedSecurityEvent(event, attackType, threatScore, receivedAt);
     }
 
     /**
-     * Repeat-offender check against already-persisted history in the window
-     * {@code [timestamp - 10min, timestamp)}. Events in the same in-flight batch are not
-     * counted (they are not persisted yet) — a documented simplification.
+     * Repeat-offender check against the pre-loaded history: counts persisted events from the
+     * same IP in this event's window {@code [timestamp - 10min, timestamp)}. Pure — no IO.
      */
-    private boolean isRepeatOffender(SecurityEvent event) {
+    private boolean isRepeatOffender(SecurityEvent event, Map<String, List<Instant>> historyByIp) {
         Instant to = event.timestamp();
         Instant from = to.minus(REPEAT_OFFENDER_WINDOW);
-        long priorCount = readRepository.countByClientIpBetween(event.clientIp(), from, to);
+        long priorCount = historyByIp.getOrDefault(event.clientIp(), List.of()).stream()
+                .filter(timestamp -> !timestamp.isBefore(from) && timestamp.isBefore(to))
+                .count();
         return priorCount > REPEAT_OFFENDER_THRESHOLD;
     }
 }

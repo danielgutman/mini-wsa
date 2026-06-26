@@ -26,6 +26,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,9 +57,6 @@ public class ClickHouseEventRepository
     private static final Logger log = LoggerFactory.getLogger(ClickHouseEventRepository.class);
 
     private static final int TOP_N = 10;
-
-    private static final String COUNT_BY_IP_SQL =
-            "SELECT count() FROM security_events WHERE client_ip = ? AND timestamp >= ? AND timestamp < ?";
 
     private static final String INSERT_SQL = """
             INSERT INTO security_events (
@@ -95,10 +94,29 @@ public class ClickHouseEventRepository
     }
 
     @Override
-    public long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive) {
-        Long count = jdbcTemplate.queryForObject(
-                COUNT_BY_IP_SQL, Long.class, clientIp, utc(fromInclusive), utc(toExclusive));
-        return count == null ? 0L : count;
+    public Map<String, List<Instant>> findEventTimestampsByClientIp(
+            Collection<String> clientIps, Instant fromInclusive, Instant toExclusive) {
+        if (clientIps.isEmpty()) {
+            return Map.of();
+        }
+        List<String> ips = List.copyOf(clientIps);
+        String placeholders = String.join(",", Collections.nCopies(ips.size(), "?"));
+        String sql = "SELECT client_ip, timestamp FROM security_events WHERE client_ip IN ("
+                + placeholders + ") AND timestamp >= ? AND timestamp < ?";
+
+        Object[] params = new Object[ips.size() + 2];
+        for (int i = 0; i < ips.size(); i++) {
+            params[i] = ips.get(i);
+        }
+        params[ips.size()] = utc(fromInclusive);
+        params[ips.size() + 1] = utc(toExclusive);
+
+        Map<String, List<Instant>> timestampsByIp = new HashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            timestampsByIp.computeIfAbsent(rs.getString("client_ip"), key -> new ArrayList<>())
+                    .add(toInstant(rs, "timestamp"));
+        }, params);
+        return timestampsByIp;
     }
 
     @Override
