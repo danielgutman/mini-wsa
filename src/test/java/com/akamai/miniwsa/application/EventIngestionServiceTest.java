@@ -15,7 +15,11 @@ import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
 import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -66,6 +70,14 @@ class EventIngestionServiceTest {
     }
 
     @Test
+    void queriesRepeatOffenderHistoryOncePerBatch() {
+        // The N+1 fix: a whole batch must trigger exactly one read-repository query.
+        service.ingest(List.of(sampleEvent("evt-1"), sampleEvent("evt-2"), sampleEvent("evt-3")));
+
+        assertThat(readRepository.invocations).isEqualTo(1);
+    }
+
+    @Test
     void emptyBatchPersistsNothing() {
         int ingested = service.ingest(List.of());
 
@@ -104,13 +116,24 @@ class EventIngestionServiceTest {
         }
     }
 
-    /** Fake read repository returning a configurable repeat-offender count. */
+    /**
+     * Fake read repository: returns {@code count} prior timestamps (inside the sample event's
+     * window) for each requested IP, and records how many times it was queried.
+     */
     private static final class StubReadRepository implements EventReadRepository {
+        private static final Instant WITHIN_WINDOW = Instant.parse("2026-05-20T14:31:00Z");
         private long count = 0;
+        private int invocations = 0;
 
         @Override
-        public long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive) {
-            return count;
+        public Map<String, List<Instant>> findEventTimestampsByClientIp(
+                Collection<String> clientIps, Instant fromInclusive, Instant toExclusive) {
+            invocations++;
+            Map<String, List<Instant>> timestampsByIp = new HashMap<>();
+            for (String clientIp : clientIps) {
+                timestampsByIp.put(clientIp, Collections.nCopies((int) count, WITHIN_WINDOW));
+            }
+            return timestampsByIp;
         }
     }
 }

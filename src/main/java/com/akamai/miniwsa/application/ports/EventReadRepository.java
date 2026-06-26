@@ -1,17 +1,24 @@
 package com.akamai.miniwsa.application.ports;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Read port used by enrichment to detect repeat offenders: how many events from the
- * same client IP already exist in a time window. The query (an IO effect) lives in the
- * application layer so the pure {@code ThreatScoreCalculator} only receives a boolean.
+ * Read port used by enrichment to detect repeat offenders. Returns the event timestamps of
+ * persisted events for a set of client IPs within a time window, grouped by IP — one query
+ * serves a whole ingestion batch (the application does the per-event windowed counting), so
+ * ingestion is not N+1 on the database. The query (an IO effect) lives in the application
+ * layer so the pure {@code ThreatScoreCalculator} still only receives a boolean.
  */
 public interface EventReadRepository {
 
     /**
-     * Counts persisted events from {@code clientIp} with event time in
-     * {@code [fromInclusive, toExclusive)}.
+     * Returns, grouped by client IP, the timestamps of persisted events whose {@code clientIp}
+     * is in {@code clientIps} and whose event time is in {@code [fromInclusive, toExclusive)}.
+     * IPs with no matching events may be absent from the map.
      */
-    long countByClientIpBetween(String clientIp, Instant fromInclusive, Instant toExclusive);
+    Map<String, List<Instant>> findEventTimestampsByClientIp(
+            Collection<String> clientIps, Instant fromInclusive, Instant toExclusive);
 }
