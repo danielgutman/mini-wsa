@@ -81,4 +81,19 @@ class EventIngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field").value(containsInAnyOrder("events")));
     }
+
+    @Test
+    void rejectsOutOfRangeNumericFields() throws Exception {
+        // statusCode beyond HTTP range and a negative configId — parseable, but invalid.
+        // Must be a clean 400, not a 500 from the (unsigned) ClickHouse columns.
+        String bad = VALID_EVENT
+                .replace("\"statusCode\": 403", "\"statusCode\": 99999")
+                .replace("\"configId\": 14227", "\"configId\": -5");
+
+        mockMvc.perform(post("/v1/events/ingest").contentType(MediaType.APPLICATION_JSON).content(bad))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errors[*].field").value(hasItem("[0].statusCode")))
+                .andExpect(jsonPath("$.errors[*].field").value(hasItem("[0].configId")));
+    }
 }
