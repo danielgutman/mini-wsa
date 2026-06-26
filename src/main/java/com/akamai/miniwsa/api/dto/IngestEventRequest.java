@@ -3,8 +3,11 @@ package com.akamai.miniwsa.api.dto;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Instant;
 
 /**
@@ -19,19 +22,19 @@ import java.time.Instant;
 public record IngestEventRequest(
         @NotBlank String eventId,
         @NotNull Instant timestamp,
-        @NotNull Long configId,
+        @NotNull @PositiveOrZero Long configId,
         String policyId,
         @NotBlank String clientIp,
         String hostname,
         @NotBlank String path,
         @NotBlank String method,
-        @NotNull Integer statusCode,
+        @NotNull @Min(100) @Max(599) Integer statusCode,
         String userAgent,
         @NotNull @Valid RuleDto rule,
         @NotNull Action action,
         @Valid GeoLocationDto geoLocation,
-        Long requestSize,
-        Long responseSize
+        @PositiveOrZero Long requestSize,
+        @PositiveOrZero Long responseSize
 ) {
 
     /**
