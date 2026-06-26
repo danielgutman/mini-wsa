@@ -293,7 +293,9 @@ by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
   the cap is kept as defensive logic.
-- The API does not chunk very large arrays; clients should batch (~1–2k events/request).
+- A single ingest request is capped at 10,000 events (beyond that → 400); clients should
+  chunk larger loads. The array is still fully deserialized before the size check, so a
+  hard request-body-size limit would be the next step for untrusted input.
 
 ## Milestones
 

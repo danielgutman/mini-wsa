@@ -83,6 +83,16 @@ class EventIngestionControllerTest {
     }
 
     @Test
+    void rejectsBatchExceedingMaxSize() throws Exception {
+        // One over the cap → clean 400 (no enrichment / storage of an oversized batch).
+        String oneEvent = VALID_EVENT.replace("evt-001", "e");
+        String tooBig = "[" + String.join(",", java.util.Collections.nCopies(10_001, oneEvent)) + "]";
+
+        mockMvc.perform(post("/v1/events/ingest").contentType(MediaType.APPLICATION_JSON).content(tooBig))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsOutOfRangeNumericFields() throws Exception {
         // statusCode beyond HTTP range and a negative configId — parseable, but invalid.
         // Must be a clean 400, not a 500 from the (unsigned) ClickHouse columns.
