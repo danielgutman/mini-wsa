@@ -504,7 +504,7 @@ client connects lazily, so the default in-memory profile boots with no Redis run
 | Enrichment | attack type + threat score + repeat offender | `v0.2-enrichment` |
 | Storage | ClickHouse adapter | — |
 | Stats | summary API | `v0.3-stats` |
-| Samples | samples API (filters + pagination) | `v0.4-sample` |
+| Samples | samples API (filters + pagination) | `v0.4-samples` |
 | Generator | data generator + release-gated E2E | `v0.5-generator` |
 | Release | first semver release | `v1.0.0` |
 
