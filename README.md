@@ -33,13 +33,14 @@ provides the adapters; `api` is thin (controllers + DTOs, with one central error
    api          Controllers ──► ErrorHandlingAdvice (RFC 7807 ProblemDetail)
                    │  DTOs ⇄ domain
                    ▼
-   application  EventIngestionService · StatsService · SamplesService
+   application  EventIngestionService · StatsService · SamplesService · AlertService
                    │            │
                    │            └─► Pure domain logic (domain/service)
                    │                  • AttackTypeClassifier
                    │                  • ThreatScoreCalculator
                    ▼
-   ports        EventWriteRepository · EventReadRepository · EventQueryRepository · ClockProvider
+   ports        EventWriteRepository · EventReadRepository · EventQueryRepository
+                 · AlertRuleRepository · ClockProvider
                    ▲ (selected by miniwsa.storage)
    infrastructure  ├─ ClickHouseEventRepository (JDBC)      ─► ClickHouse
                    └─ InMemoryEventRepository (default)
@@ -52,6 +53,10 @@ for the repeat-offender count, computes the threat score with the **pure**
 
 **Query flow:** controllers bind `@Valid` params → `StatsService`/`SamplesService` →
 `EventQueryRepository` → the active adapter (ClickHouse `GROUP BY`/top-N, or in-memory streams).
+
+**Alerting flow (bonus):** `AlertService` stores threshold rules (`AlertRuleRepository`) and, on
+`evaluate`, counts each rule's category over `[now − window, now)` (`ClockProvider` + the same
+`EventQueryRepository`) — reusing the existing ports rather than adding a new pipeline.
 
 ### Enrichment rules
 
@@ -255,6 +260,40 @@ curl "http://localhost:8080/v1/stats/timeseries?configId=14227\
 }
 ```
 
+### Alert rules — `POST /v1/alerts/define` and `GET /v1/alerts/evaluate` (bonus)
+
+Define threshold rules, then check which are firing. A rule means *"more than `threshold` events
+of `category` within the last `windowMinutes` minutes"* (`configId` optional — null = all configs).
+`evaluate` counts each rule's category over `[now − windowMinutes, now)` and returns the rules
+whose count exceeds the threshold. Rules are kept **in memory** (not persisted across restarts).
+
+```bash
+# define a rule
+curl -X POST http://localhost:8080/v1/alerts/define \
+  -H "Content-Type: application/json" \
+  -d '{"configId":14227,"category":"INJECTION","threshold":100,"windowMinutes":5}'
+# -> 201 {"id":"rule-1","configId":14227,"category":"INJECTION","threshold":100,"windowMinutes":5}
+
+# evaluate all defined rules against current data
+curl http://localhost:8080/v1/alerts/evaluate
+```
+
+```json
+{
+  "evaluatedAt": "2026-05-20T14:35:00Z",
+  "firing": [
+    {
+      "ruleId": "rule-1", "configId": 14227, "category": "INJECTION",
+      "threshold": 100, "windowMinutes": 5, "actualCount": 143,
+      "windowFrom": "2026-05-20T14:30:00Z", "windowTo": "2026-05-20T14:35:00Z"
+    }
+  ]
+}
+```
+
+The window is relative to **now**, so only recent events fire a rule. Invalid definitions
+(missing `category`, `threshold`/`windowMinutes` < 1) → `400`.
+
 ## Generating test data
 
 A **seeded** generator produces realistic events plus **attack waves** (bursts from one IP
@@ -361,9 +400,9 @@ docker run -p 8080:8080 \
 
 ## Roadmap (with more time)
 
-The core pipeline is complete, plus several extras — time-series stats, configurable limits,
-Prometheus metrics, OpenAPI/Swagger, and the full Docker stack. The next steps, in rough priority
-order:
+The core pipeline is complete, plus several extras — time-series stats, alerting (both bonus
+challenges), configurable limits, Prometheus metrics, OpenAPI/Swagger, and the full Docker stack.
+The next steps, in rough priority order:
 
 **Security**
 - **Authentication & authorization** — protect ingest and query (API key / mTLS, or OAuth2 at the

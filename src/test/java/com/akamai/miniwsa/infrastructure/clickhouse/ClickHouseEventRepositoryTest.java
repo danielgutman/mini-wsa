@@ -174,6 +174,26 @@ class ClickHouseEventRepositoryTest {
         assertThat(buckets.get(1).count()).isEqualTo(1);
     }
 
+    @Test
+    void countsEventsByCategoryInWindow() {
+        long configId = 560L;
+        repository.saveAll(List.of(
+                summaryEvent("cc-1", "1.1.1.1", "/x", RuleCategory.INJECTION, Action.DENY, 90, configId, "2026-05-20T10:00:00Z"),
+                summaryEvent("cc-2", "1.1.1.1", "/x", RuleCategory.INJECTION, Action.DENY, 90, configId, "2026-05-20T10:05:00Z"),
+                summaryEvent("cc-3", "2.2.2.2", "/x", RuleCategory.BOT, Action.ALERT, 55, configId, "2026-05-20T10:06:00Z")));
+
+        Instant dayStart = Instant.parse("2026-05-20T00:00:00Z");
+        Instant dayEnd = Instant.parse("2026-05-21T00:00:00Z");
+
+        // category filter: 2 INJECTION, 1 BOT
+        assertThat(repository.countByCategory(configId, RuleCategory.INJECTION, dayStart, dayEnd)).isEqualTo(2);
+        assertThat(repository.countByCategory(configId, RuleCategory.BOT, dayStart, dayEnd)).isEqualTo(1);
+
+        // window is half-open [from, to): from 10:01 excludes cc-1 (10:00), keeps cc-2 (10:05)
+        assertThat(repository.countByCategory(
+                configId, RuleCategory.INJECTION, Instant.parse("2026-05-20T10:01:00Z"), dayEnd)).isEqualTo(1);
+    }
+
     private static EnrichedSecurityEvent summaryEvent(String id, String ip, String path, RuleCategory category,
                                                       Action action, int threatScore, long configId, String timestamp) {
         Rule rule = new Rule("r", "R", "m", Severity.HIGH, category);

@@ -16,6 +16,7 @@ import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
 import com.akamai.miniwsa.application.query.TimeSeriesBucket;
 import com.akamai.miniwsa.application.query.TimeSeriesQuery;
 import com.akamai.miniwsa.config.LimitsProperties;
+import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.time.Instant;
@@ -148,6 +149,23 @@ public class InMemoryEventRepository
             buckets.add(new TimeSeriesBucket(bucketStart, bucketEnd, count));
         }
         return buckets;
+    }
+
+    @Override
+    public long countByCategory(Long configId, RuleCategory category, Instant fromInclusive, Instant toExclusive) {
+        return store.stream()
+                .filter(enriched -> {
+                    SecurityEvent event = enriched.event();
+                    if (configId != null && configId != event.configId()) {
+                        return false;
+                    }
+                    if (event.rule().category() != category) {
+                        return false;
+                    }
+                    Instant timestamp = event.timestamp();
+                    return !timestamp.isBefore(fromInclusive) && timestamp.isBefore(toExclusive);
+                })
+                .count();
     }
 
     private static boolean inRange(EnrichedSecurityEvent enriched, Long configId, Instant from, Instant to) {
