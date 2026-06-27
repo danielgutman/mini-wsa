@@ -1,6 +1,9 @@
 spring:
   application:
     name: mini-wsa
+  jackson:
+    serialization:
+      write-durations-as-timestamps: false   # Durations as ISO-8601 (e.g. "PT10M") in JSON
 
 server:
   port: 8080
@@ -13,6 +16,18 @@ miniwsa:
     url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/mini_wsa}
     username: ${CLICKHOUSE_USER:mini_wsa}
     password: ${CLICKHOUSE_PASSWORD:mini_wsa}
+  # Runtime-tunable enrichment rules. Seed values; swappable live via PUT /v1/admin/config.
+  tunables:
+    scoring:
+      severity-base: { CRITICAL: 40, HIGH: 30, MEDIUM: 20, LOW: 10 }
+      action-bonus: { DENY: 20, ALERT: 10, MONITOR: 0 }
+      sensitive-path-bonus: 15
+      repeat-offender-bonus: 15
+      max-score: 100
+      sensitive-paths: [ "/admin", "/login" ]
+    repeat-offender:
+      window: 10m
+      threshold: 5
 
 # Actuator exposes a health endpoint for liveness checks and local verification.
 management:

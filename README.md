@@ -218,6 +218,33 @@ curl "http://localhost:8080/v1/stats/timeseries?configId=14227\
 }
 ```
 
+## Runtime configuration (live-tunable rules)
+
+The enrichment rules — threat-score weights and the repeat-offender window/threshold — are
+**tunable at runtime, without a restart**. They're seeded from `application.yml`
+(`miniwsa.tunables`) and held in an atomic snapshot; the admin endpoint swaps them and the
+change applies to the **next ingested batch**.
+
+```bash
+curl http://localhost:8080/v1/admin/config                       # read current settings
+
+curl -X PUT http://localhost:8080/v1/admin/config \              # change them live
+  -H "Content-Type: application/json" \
+  -d '{"scoring":{"severityBase":{"CRITICAL":25,"HIGH":30,"MEDIUM":20,"LOW":10},
+       "actionBonus":{"DENY":20,"ALERT":10,"MONITOR":0},"sensitivePathBonus":0,
+       "repeatOffenderBonus":15,"maxScore":100,"sensitivePaths":["/admin","/login"]},
+       "repeatOffender":{"window":"PT10M","threshold":5}}'
+```
+
+How it works: an `AtomicReference<Tunables>` is read once per batch (lock-free, consistent
+snapshot) and swapped atomically on `PUT`, so the change is immediate and the pure
+`ThreatScoreCalculator` still just receives the weights (the domain stays config-free).
+Durations are ISO-8601 (`PT10M`); invalid bodies return `400`.
+
+> Unauthenticated here (auth is a documented non-goal) — in production it would sit behind
+> admin authn/authz. The same holder is where the remaining operational tunables (pagination
+> defaults, top-N, max batch) would plug in.
+
 ## Generating test data
 
 A **seeded** generator produces realistic events plus **attack waves** (bursts from one IP

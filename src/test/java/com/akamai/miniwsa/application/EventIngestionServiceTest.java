@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.akamai.miniwsa.application.ports.ClockProvider;
 import com.akamai.miniwsa.application.ports.EventReadRepository;
 import com.akamai.miniwsa.application.ports.EventWriteRepository;
+import com.akamai.miniwsa.config.tunables.Tunables;
+import com.akamai.miniwsa.config.tunables.TunablesHolder;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -12,7 +14,9 @@ import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.Rule;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
+import com.akamai.miniwsa.domain.service.ScoringWeights;
 import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,11 +36,19 @@ class EventIngestionServiceTest {
 
     private static final Instant FIXED_NOW = Instant.parse("2026-05-20T14:32:11Z");
 
+    private static final Tunables TUNABLES = new Tunables(
+            new ScoringWeights(
+                    Map.of(Severity.CRITICAL, 40, Severity.HIGH, 30, Severity.MEDIUM, 20, Severity.LOW, 10),
+                    Map.of(Action.DENY, 20, Action.ALERT, 10, Action.MONITOR, 0),
+                    15, 15, 100, List.of("/admin", "/login")),
+            Duration.ofMinutes(10), 5);
+
     private final ClockProvider fixedClock = () -> FIXED_NOW;
     private final RecordingRepository repository = new RecordingRepository();
     private final StubReadRepository readRepository = new StubReadRepository();
     private final EventIngestionService service = new EventIngestionService(
-            fixedClock, repository, readRepository, new AttackTypeClassifier(), new ThreatScoreCalculator());
+            fixedClock, repository, readRepository, new AttackTypeClassifier(), new ThreatScoreCalculator(),
+            new TunablesHolder(TUNABLES));
 
     @Test
     void enrichesSingleEventWithAttackTypeScoreAndReceivedAt() {
