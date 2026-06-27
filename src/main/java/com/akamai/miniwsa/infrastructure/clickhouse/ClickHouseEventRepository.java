@@ -123,9 +123,8 @@ public class ClickHouseEventRepository
     public SummaryStats getSummary(SummaryQuery query) {
         Filter filter = rangeFilter(query.configId(), query.from(), query.to());
 
-        Long total = jdbcTemplate.queryForObject(
-                "SELECT count() FROM security_events " + filter.where, Long.class, filter.params);
-
+        // Every event has exactly one category, so the per-category counts sum to the total —
+        // derive it here instead of issuing a separate count() query.
         Map<String, CategoryStats> byCategory = new LinkedHashMap<>();
         jdbcTemplate.query(
                 "SELECT rule_category, count() AS c, avg(threat_score) AS avg "
@@ -135,6 +134,8 @@ public class ClickHouseEventRepository
                             new CategoryStats(rs.getLong("c"), round(rs.getDouble("avg"))));
                 },
                 filter.params);
+
+        long total = byCategory.values().stream().mapToLong(CategoryStats::count).sum();
 
         Map<String, Long> byAction = new LinkedHashMap<>();
         jdbcTemplate.query(
@@ -157,7 +158,7 @@ public class ClickHouseEventRepository
                 (rs, i) -> new PathStats(rs.getString("path"), rs.getLong("c")),
                 filter.params);
 
-        return new SummaryStats(total == null ? 0L : total, byCategory, byAction, topAttackers, topTargetedPaths);
+        return new SummaryStats(total, byCategory, byAction, topAttackers, topTargetedPaths);
     }
 
     @Override
