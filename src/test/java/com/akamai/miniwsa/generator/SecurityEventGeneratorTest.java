@@ -35,6 +35,18 @@ class SecurityEventGeneratorTest {
     }
 
     @Test
+    void allEventsFallWithinTheConfiguredWindow() {
+        // Including wave events — a wave must not spill past startTime+span.
+        Instant start = CONFIG.startTime();
+        Instant end = start.plus(CONFIG.span());
+
+        List<SecurityEvent> events = new SecurityEventGenerator(3L).generate(CONFIG);
+
+        assertThat(events).allSatisfy(event ->
+                assertThat(event.timestamp()).isAfterOrEqualTo(start).isBefore(end));
+    }
+
+    @Test
     void isReproducibleForTheSameSeed() {
         List<SecurityEvent> first = new SecurityEventGenerator(99L).generate(CONFIG);
         List<SecurityEvent> second = new SecurityEventGenerator(99L).generate(CONFIG);
