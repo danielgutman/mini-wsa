@@ -27,14 +27,18 @@ import org.springframework.stereotype.Service;
  * <p>Repeat-offender history is loaded with a <b>single</b> query per batch (not one per
  * event), then the per-event 10-minute windowed count is done in pure code — so a large
  * batch is not N+1 on the database. The query is the only IO; the pure
- * {@link ThreatScoreCalculator} just receives a boolean (IO policy §5).
+ * {@link ThreatScoreCalculator} just receives a boolean.
  */
 @Service
 public class EventIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(EventIngestionService.class);
 
-    /** Repeat-offender window and threshold (PRD §2): > 5 events from the same IP in 10 min. */
+    /**
+     * Repeat-offender window and threshold (PRD §2): "more than 5 events from the same clientIp
+     * within the last 10 minutes" → +15. See {@link #isRepeatOffender} for the deliberate reading
+     * of which events count toward the 5.
+     */
     private static final Duration REPEAT_OFFENDER_WINDOW = Duration.ofMinutes(10);
     private static final long REPEAT_OFFENDER_THRESHOLD = 5;
 
@@ -102,7 +106,30 @@ public class EventIngestionService {
 
     /**
      * Repeat-offender check against the pre-loaded history: counts persisted events from the
-     * same IP in this event's window {@code [timestamp - 10min, timestamp)}. Pure — no IO.
+     * same IP in this event's window {@code [timestamp - 10min, timestamp)}.
+     *
+     * <p><b>Threshold semantics — a deliberate reading of an ambiguous spec.</b> The PRD says
+     * "if more than 5 events from the same clientIp exist within the last 10 minutes, add +15",
+     * which does not state whether the event being scored counts toward the 5. We count only the
+     * <em>prior persisted</em> events:
+     * <ul>
+     *   <li>the window is half-open and excludes the current event's own timestamp
+     *       ({@code toExclusive == event.timestamp()}); and</li>
+     *   <li>events earlier in the same in-flight batch are not counted either — they are not
+     *       persisted until after enrichment.</li>
+     * </ul>
+     * So the bonus first triggers on the <b>7th</b> event from an IP (6 priors {@code > 5}), not
+     * the 6th. Rationale: "events that exist within the last 10 minutes" reads naturally as
+     * already-recorded history relative to this event, and a prior-only count is unambiguous and
+     * independent of ordering within a batch. To instead make the current event count toward the
+     * 5, change the comparison below to {@code priorCount >= REPEAT_OFFENDER_THRESHOLD}.
+     *
+     * <p><b>Consequence — single-request bursts.</b> Because only prior persisted events count, an
+     * attack wave delivered as one batch (e.g. the PRD's "50 events from the same IP against
+     * /login within 3 minutes") receives no repeat-offender bonus — each event sees only history
+     * that existed <em>before</em> the request. Waves spread across separate requests over time
+     * are detected normally. To also flag intra-batch waves, fold earlier same-batch events
+     * (sorted by timestamp) into each event's window before scoring.
      */
     private boolean isRepeatOffender(SecurityEvent event, Map<String, List<Instant>> historyByIp) {
         Instant to = event.timestamp();
@@ -110,6 +137,7 @@ public class EventIngestionService {
         long priorCount = historyByIp.getOrDefault(event.clientIp(), List.of()).stream()
                 .filter(timestamp -> !timestamp.isBefore(from) && timestamp.isBefore(to))
                 .count();
+        // Strict ">": prior events only; current/within-batch events do not count (see Javadoc).
         return priorCount > REPEAT_OFFENDER_THRESHOLD;
     }
 }
