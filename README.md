@@ -380,11 +380,11 @@ cycle one at a time. (No custom config API: that's overkill for deploy-time limi
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
   the cap is kept as defensive logic.
-- A single ingest request is capped at 10,000 events (beyond that → app returns 400); clients
-  should chunk larger loads. The app-level check deserializes the array first, so the
-  byte-level guard is the **edge** (`docker compose` runs nginx with `client_max_body_size`,
-  returning 413 before the app reads the body); in production that limit lives at the
-  gateway/Akamai edge.
+- A single ingest request is capped at `miniwsa.limits.max-batch-size` (default 10,000) events
+  (beyond that → app returns 400); clients should chunk larger loads. The app-level check
+  deserializes the array first, so the byte-level guard is the **edge** (`docker compose` runs
+  nginx with `client_max_body_size`, returning 413 before the app reads the body); in production
+  that limit lives at the gateway/Akamai edge.
 
 ## Milestones
 
