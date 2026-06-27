@@ -22,6 +22,9 @@ Clean / hexagonal layering — the **domain is pure** (no Spring, HTTP, JSON, or
 `application` layer orchestrates use cases through **ports** (interfaces); `infrastructure`
 provides the adapters; `api` is thin (controllers + DTOs, with one central error handler).
 
+> 📖 New to the code? [`docs/CODE_TOUR.md`](docs/CODE_TOUR.md) is a guided reading order with
+> end-to-end walkthroughs of an ingest and a query request.
+
 ```
             Client / Generator
                    │  HTTP (JSON)
