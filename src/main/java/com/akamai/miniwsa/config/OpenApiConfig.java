@@ -26,6 +26,6 @@ public class OpenApiConfig {
                         .description("Web Security Analytics pipeline — ingest security events, enrich them "
                                 + "(attack type + a 0-100 threat score), and query summary, time-series, and "
                                 + "sample analytics.")
-                        .version("1.0.0"));
+                        .version("1.1.0"));
     }
 }

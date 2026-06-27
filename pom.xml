@@ -13,7 +13,7 @@
 
     <groupId>com.akamai</groupId>
     <artifactId>mini-wsa</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <name>mini-wsa</name>
     <description>Mini Web Security Analytics pipeline</description>
 
