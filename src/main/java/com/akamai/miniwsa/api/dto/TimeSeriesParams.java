@@ -9,8 +9,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 /**
  * Bound and validated query parameters for {@code GET /v1/stats/timeseries}. {@code from},
- * {@code to}, and {@code interval} are required; {@code configId} is optional. Validation is
- * raised by the framework and rendered by the central error handler — no throwing here.
+ * {@code to}, and {@code interval} are required and must form a valid range; {@code configId}
+ * is optional. The constraints live here as Bean Validation annotations.
  */
 public record TimeSeriesParams(
         Long configId,

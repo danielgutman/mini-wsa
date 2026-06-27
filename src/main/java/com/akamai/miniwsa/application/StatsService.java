@@ -9,9 +9,9 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates the summary query. Request validation is handled at the API boundary (Bean
- * Validation on the params), so this layer just delegates to the {@link EventQueryRepository};
- * the heavy aggregation work happens in the storage adapter.
+ * Orchestrates the analytics read queries — summary aggregates and time-series buckets —
+ * delegating to the {@link EventQueryRepository}; the heavy aggregation work happens in the
+ * storage adapter.
  */
 @Service
 public class StatsService {

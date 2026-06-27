@@ -9,9 +9,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 /**
  * Bound and validated query parameters for {@code GET /v1/events/samples}. All filters are
- * optional. Pagination floors are enforced by Bean Validation ({@code limit >= 1},
- * {@code offset >= 0}); the max-limit clamp and defaulting are transformations applied by
- * the service. Validation is raised by the framework — no throwing in our code.
+ * optional; the constraints (pagination floors {@code limit >= 1}, {@code offset >= 0}, and a
+ * valid time range) live here as Bean Validation annotations. The max-limit clamp and
+ * defaulting are applied by the service.
  */
 public record SamplesParams(
         Long configId,

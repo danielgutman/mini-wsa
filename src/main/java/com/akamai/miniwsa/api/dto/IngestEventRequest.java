@@ -16,8 +16,7 @@ import java.time.Instant;
  * <p>Carries all JSON/validation concerns so the domain stays pure. The required
  * fields below define the ingestion schema; optional fields (policyId, hostname,
  * userAgent, geoLocation, request/response sizes) may be omitted. {@code timestamp}
- * is bound as an {@link Instant}, so a malformed value fails JSON parsing and is
- * surfaced as a 400.
+ * is bound as an {@link Instant}.
  */
 public record IngestEventRequest(
         @NotBlank String eventId,

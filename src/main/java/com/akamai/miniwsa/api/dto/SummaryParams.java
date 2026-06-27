@@ -6,9 +6,9 @@ import java.time.Instant;
 import org.springframework.format.annotation.DateTimeFormat;
 
 /**
- * Bound and validated query parameters for {@code GET /v1/stats/summary}. Validation lives
- * here as Bean Validation constraints, so a missing/invalid value is raised by the framework
- * and rendered by the single error handler — no throwing in the controller or service.
+ * Bound and validated query parameters for {@code GET /v1/stats/summary}. {@code from} and
+ * {@code to} are required and must form a valid range; {@code configId} is optional. The
+ * constraints live here as Bean Validation annotations.
  */
 public record SummaryParams(
         Long configId,

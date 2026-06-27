@@ -5,10 +5,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Minimal liveness endpoint used to confirm the application is up.
- *
- * <p>This is a Phase 1 placeholder so the skeleton is verifiable end-to-end.
- * Richer health/metrics are available under {@code /actuator/health}.
+ * Minimal liveness endpoint used to confirm the application is up. Richer health/metrics
+ * are available under {@code /actuator/health}.
  */
 @RestController
 public class PingController {

@@ -18,10 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Ingestion endpoint: accepts a single event object or a JSON array (both bind to the list),
  * validates the request, maps it to the domain model, and delegates to the service.
- *
- * <p>Thin by design — it never builds error responses or throws. Invalid input (unknown enums,
- * malformed timestamps, missing fields, an oversized batch) is rejected by Bean Validation and
- * rendered centrally in {@code ErrorHandlingAdvice}.
  */
 @RestController
 @RequestMapping("/v1/events")

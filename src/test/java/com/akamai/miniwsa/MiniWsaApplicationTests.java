@@ -9,9 +9,8 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
- * Smoke test for the Phase 1 skeleton: verifies the Spring context loads and the
- * liveness endpoint responds. Acts as the baseline integration test the later
- * API integration tests will build on.
+ * Smoke test: verifies the Spring context loads and the liveness endpoint responds —
+ * the baseline that the API integration tests build on.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class MiniWsaApplicationTests {
