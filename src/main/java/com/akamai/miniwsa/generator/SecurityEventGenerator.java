@@ -62,7 +62,7 @@ public class SecurityEventGenerator {
         String clientIp = randomIp();
         String path = pick(SENSITIVE_PATHS);
         RuleCategory category = pick(List.of(RuleCategory.INJECTION, RuleCategory.BOT, RuleCategory.DOS));
-        Instant waveStart = randomTimestamp(config);
+        Instant waveStart = randomWaveStart(config);
 
         List<SecurityEvent> wave = new ArrayList<>(config.waveSize());
         for (int i = 0; i < config.waveSize(); i++) {
@@ -115,6 +115,16 @@ public class SecurityEventGenerator {
     private Instant randomTimestamp(GeneratorConfig config) {
         long spanSeconds = Math.max(1, config.span().toSeconds());
         return config.startTime().plusSeconds(Math.floorMod(random.nextLong(), spanSeconds));
+    }
+
+    /**
+     * Picks a wave start that leaves room for the whole {@link #WAVE_DURATION}-long burst, so a
+     * wave's events stay within {@code [startTime, startTime + span)} instead of spilling up to
+     * 3 minutes past the end.
+     */
+    private Instant randomWaveStart(GeneratorConfig config) {
+        long usableSeconds = Math.max(1, config.span().toSeconds() - WAVE_DURATION.toSeconds());
+        return config.startTime().plusSeconds(Math.floorMod(random.nextLong(), usableSeconds));
     }
 
     private String randomIp() {
