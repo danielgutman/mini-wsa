@@ -11,8 +11,10 @@ exposes analytics APIs for statistics and individual sample retrieval.
 - **Maven** (via the `./mvnw` wrapper)
 - **ClickHouse** (column-oriented analytics store) over JDBC; **Docker Compose** for local dev
 - **OpenAPI 3 / Swagger UI** (springdoc) for interactive, code-generated API docs
+- **Micrometer + Prometheus** for metrics (`/actuator/prometheus`)
 - **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse adapter
-- GitHub Actions: unit CI on every push, a release-gated full-pipeline E2E
+- GitHub Actions: build + tests and a Docker-stack smoke test on every push/PR; a release-gated
+  full-pipeline E2E
 
 ## Architecture
 
@@ -184,7 +186,7 @@ curl -X POST http://localhost:8080/v1/events/ingest \
 
 Params: `from`, `to` (**required**, ISO-8601), `configId` (optional — omit to aggregate
 across all configs). Returns totals, per-category (count + avg threat score), per-action
-counts, and the top-10 attackers and targeted paths.
+counts, and the top attackers and targeted paths (default 10 — see [Configuration](#configuration)).
 
 ```bash
 curl "http://localhost:8080/v1/stats/summary?configId=14227\
@@ -303,16 +305,19 @@ docker compose down -v
 
 ## Releasing
 
-Versions come from `pom.xml`. Developer **milestones** are
-manual `vX.Y-something` tags (e.g. `v0.3-stats`) and trigger nothing. A **release** is the
-`Release` workflow (`workflow_dispatch`): it runs the full-pipeline E2E gate, and **only on
-success** reads the pom version and creates the `vX.Y.Z` tag + GitHub Release. Cut `v1.0.0`
-by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
+Versions come from `pom.xml`. Developer **milestones** are manual `vX.Y-something` tags (e.g.
+`v0.3-stats`) and trigger nothing. A **release** is the `Release` workflow, run manually from the
+**Actions** tab (`workflow_dispatch`) — you don't push the tag yourself. It runs the full-pipeline
+E2E gate **and** a Docker image build, and **only if both pass** reads the pom version (rejecting
+`-SNAPSHOT`) and creates the `vX.Y.Z` tag + GitHub Release. Cut `v1.0.0` by setting
+`<version>1.0.0</version>` in `pom.xml` (already set), then running the workflow.
 
 ## Trade-offs
 
-- **Repeat-offender is one query per event.** For a batch of N events, that's N count
-  queries — simple and correct, but O(N) round-trips. Fine for this scope; see improvements.
+- **Repeat-offender history is one query per batch**, then the per-event 10-minute windowed
+  count runs in memory — so a large batch is **not** N+1 on the database. The trade-off is the
+  in-memory count; a ClickHouse-side windowed aggregate or a Redis rolling counter would scale
+  further (see roadmap).
 - **Within-batch events don't count toward repeat-offender** (they're persisted after the
   batch is enriched). A documented simplification.
 - **No `event_id` idempotency** — re-ingesting the same event inserts a duplicate. `MergeTree`
@@ -369,7 +374,7 @@ cycle one at a time. (No custom config API: that's overkill for deploy-time limi
 ## Known limitations
 
 - Duplicate events are not deduplicated.
-- Repeat-offender lookups are O(N) per batch (see trade-offs).
+- Repeat-offender counts are computed in memory from one query per batch (see trade-offs).
 - The in-memory adapter is not persistent (dev/test only).
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
