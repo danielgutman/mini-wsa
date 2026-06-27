@@ -192,13 +192,16 @@ public class ClickHouseEventRepository
                 },
                 filter.params);
 
-        // Build a contiguous, interval-aligned series, filling empty buckets with 0.
+        // Build a contiguous, interval-aligned series, filling empty buckets with 0. The last
+        // bucket's end is clamped to the requested `to` when `to` is not interval-aligned, so a
+        // bucket label never overshoots the queried range.
         List<TimeSeriesBucket> buckets = new ArrayList<>();
         for (Instant start = floorToInterval(query.from(), stepSeconds);
                 start.isBefore(query.to());
                 start = start.plusSeconds(stepSeconds)) {
-            buckets.add(new TimeSeriesBucket(start, start.plusSeconds(stepSeconds),
-                    countsByBucket.getOrDefault(start, 0L)));
+            Instant rawEnd = start.plusSeconds(stepSeconds);
+            Instant end = rawEnd.isAfter(query.to()) ? query.to() : rawEnd;
+            buckets.add(new TimeSeriesBucket(start, end, countsByBucket.getOrDefault(start, 0L)));
         }
         return buckets;
     }
