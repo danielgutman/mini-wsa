@@ -321,17 +321,36 @@ by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
   shape — ProblemDetail is the Spring Boot 3 standard and is handled in exactly one place.
 - **REST-only ingestion** (no Kafka), per the corrected scope.
 
-## What I would improve with more time
+## Roadmap (with more time)
 
-- **Batch the repeat-offender computation**: one grouped query per ingest batch (count by IP
-  over the window) instead of per-event; or a Redis rolling counter / ClickHouse materialized
-  view for production scale.
-- **Idempotency**: dedupe on `event_id` (e.g. `ReplacingMergeTree` or a pre-insert check).
-- **Schema migrations** (Flyway-style) instead of a Docker init script; managed by the app.
-- **Keyset pagination** for samples (large `offset` scans rows it then discards).
-- **The time-series bonus** (`GET /v1/stats/timeseries`), reusing the same query layer.
-- **Production concerns**: authentication, rate limiting, metrics/tracing, async/bulk
-  ingestion, ClickHouse replication/sharding.
+The core pipeline is complete, plus several extras — time-series stats, configurable limits,
+Prometheus metrics, OpenAPI/Swagger, and the full Docker stack. The next steps, in rough priority
+order:
+
+**Security**
+- **Authentication & authorization** — protect ingest and query (API key / mTLS, or OAuth2 at the
+  edge). The APIs are currently open; for a security product this is the most defensible gap.
+- **Rate limiting / quotas** — per-client throttling at the edge or app.
+
+**Resilience & scale**
+- **Survive a ClickHouse outage** — retry plus a bounded write buffer / dead-letter and
+  backpressure; today an outage means `500`s and dropped events.
+- **Async / buffered ingestion** — decouple accept from persist (in-app batch-and-flush, or a
+  Kafka front) for higher sustained throughput.
+- **High availability** — the app tier is near-stateless, so HA there is just running N replicas
+  behind the LB; the heavy part is the data tier: ClickHouse replication + sharding via
+  clickhouse-keeper and `Distributed` tables.
+
+**Data & API**
+- **Idempotency / dedup** — dedupe on `event_id` (`ReplacingMergeTree`, or a pre-insert check).
+- **Keyset pagination** for samples (a large `offset` scans rows it then discards).
+- **Richer analytics** — geo and per-rule breakdowns, severity-over-time (the columns are already
+  stored).
+- **Schema migrations** (Flyway-style, app-managed) instead of the Docker init script.
+
+**Observability**
+- **Grafana dashboards + Prometheus alert rules** on top of the metrics already exposed.
+- **Distributed tracing** (OpenTelemetry) to complement the metrics.
 
 ## Configuration
 
