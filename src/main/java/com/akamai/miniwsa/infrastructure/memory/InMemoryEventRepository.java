@@ -35,6 +35,12 @@ import org.springframework.stereotype.Repository;
  * In-memory adapter implementing the write/read/query ports. Lets the service run and be
  * integration-tested without a live ClickHouse; it is the default storage until the
  * ClickHouse adapter is selected via {@code miniwsa.storage}.
+ *
+ * <p><b>Development / test only — not for production.</b> The store is an in-memory list with
+ * no eviction, so under sustained ingestion it grows without bound. That is fine for its
+ * intended use (short-lived tests and local dev with small datasets); production runs against
+ * ClickHouse ({@code miniwsa.storage=clickhouse}). If an in-memory mode ever needed to run for
+ * long, the store should be given a bounded capacity with oldest-first eviction.
  */
 @Repository
 @ConditionalOnProperty(name = "miniwsa.storage", havingValue = "memory", matchIfMissing = true)
@@ -43,6 +49,7 @@ public class InMemoryEventRepository
 
     private static final int TOP_N = 10;
 
+    // Unbounded by design — dev/test only; see the class note. Not for production.
     private final List<EnrichedSecurityEvent> store = new CopyOnWriteArrayList<>();
 
     @Override
