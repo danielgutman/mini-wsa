@@ -9,7 +9,9 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,9 +36,19 @@ class RedisAlertRuleRepositoryTest {
         LettuceConnectionFactory factory =
                 new LettuceConnectionFactory(redis.getHost(), redis.getMappedPort(6379));
         factory.afterPropertiesSet();
-        StringRedisTemplate template = new StringRedisTemplate(factory);
+
+        StringRedisSerializer keys = new StringRedisSerializer();
+        Jackson2JsonRedisSerializer<AlertRule> values =
+                new Jackson2JsonRedisSerializer<>(new ObjectMapper(), AlertRule.class);
+        RedisTemplate<String, AlertRule> template = new RedisTemplate<>();
+        template.setConnectionFactory(factory);
+        template.setKeySerializer(keys);
+        template.setHashKeySerializer(keys);
+        template.setValueSerializer(values);
+        template.setHashValueSerializer(values);
         template.afterPropertiesSet();
-        repository = new RedisAlertRuleRepository(template, new ObjectMapper());
+
+        repository = new RedisAlertRuleRepository(template);
     }
 
     @Test

@@ -135,7 +135,9 @@ class FullPipelineE2ETest {
     }
 
     @Test
-    void definesAndEvaluatesAlertsAgainstClickHouse() throws Exception {
+    void definesAndEvaluatesAlerts() throws Exception {
+        // Exercises both stores end-to-end: rules live in the alert-rule store (Redis in CI),
+        // while the counts are queried from the events in ClickHouse.
         // A dedicated config + "now"-stamped events so they fall inside the evaluation window
         // (and stay isolated from the 10k historical dataset above).
         long alertConfigId = 99999L;
