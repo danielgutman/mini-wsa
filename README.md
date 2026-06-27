@@ -116,8 +116,8 @@ docker compose down -v              # stop + wipe data
 
 Traffic flows `client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
 request bodies (`client_max_body_size 8m`) and returns **413** for oversized payloads before
-they reach the app — defense-in-depth alongside the app's 10k-event `@Size` cap (which returns
-a JSON **400**). ClickHouse's schema is auto-applied on first start.
+they reach the app — defense-in-depth alongside the app's configurable batch cap
+(`miniwsa.limits.max-batch-size`, a JSON **400**). ClickHouse's schema is auto-applied on first start.
 
 ### App-only against ClickHouse (local dev)
 
@@ -298,6 +298,20 @@ by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
 - **The time-series bonus** (`GET /v1/stats/timeseries`), reusing the same query layer.
 - **Production concerns**: authentication, rate limiting, metrics/tracing, async/bulk
   ingestion, ClickHouse replication/sharding.
+
+## Configuration
+
+Operational limits are externalized under `miniwsa.limits` (the analytics/scoring rules are
+deliberately fixed in code, not configurable):
+
+| Setting | Env var | Default | Meaning |
+|---|---|---|---|
+| `miniwsa.limits.max-batch-size` | `MINIWSA_MAX_BATCH_SIZE` | 10000 | max events per ingest request (larger → 400) |
+| `miniwsa.limits.summary-top-limit` | `MINIWSA_SUMMARY_TOP_LIMIT` | 10 | summary entries for top attackers / top paths |
+
+Override per environment via env vars or a k8s ConfigMap; to apply a change with **no service
+downtime**, update the value and do a **rolling restart** (`kubectl rollout restart`) — pods
+cycle one at a time. (No custom config API: that's overkill for deploy-time limits.)
 
 ## Known limitations
 

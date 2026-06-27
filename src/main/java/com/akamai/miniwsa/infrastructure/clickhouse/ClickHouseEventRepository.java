@@ -12,6 +12,7 @@ import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
 import com.akamai.miniwsa.application.query.TimeSeriesBucket;
 import com.akamai.miniwsa.application.query.TimeSeriesQuery;
+import com.akamai.miniwsa.config.LimitsProperties;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -56,8 +57,6 @@ public class ClickHouseEventRepository
 
     private static final Logger log = LoggerFactory.getLogger(ClickHouseEventRepository.class);
 
-    private static final int TOP_N = 10;
-
     private static final String INSERT_SQL = """
             INSERT INTO security_events (
                 event_id, timestamp, received_at,
@@ -69,9 +68,11 @@ public class ClickHouseEventRepository
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final LimitsProperties limits;
 
-    public ClickHouseEventRepository(JdbcTemplate clickHouseJdbcTemplate) {
+    public ClickHouseEventRepository(JdbcTemplate clickHouseJdbcTemplate, LimitsProperties limits) {
         this.jdbcTemplate = clickHouseJdbcTemplate;
+        this.limits = limits;
     }
 
     @Override
@@ -148,13 +149,13 @@ public class ClickHouseEventRepository
         List<AttackerStats> topAttackers = jdbcTemplate.query(
                 "SELECT client_ip, count() AS c, avg(threat_score) AS avg "
                         + "FROM security_events " + filter.where
-                        + " GROUP BY client_ip ORDER BY c DESC LIMIT " + TOP_N,
+                        + " GROUP BY client_ip ORDER BY c DESC LIMIT " + limits.summaryTopLimit(),
                 (rs, i) -> new AttackerStats(rs.getString("client_ip"), rs.getLong("c"), round(rs.getDouble("avg"))),
                 filter.params);
 
         List<PathStats> topTargetedPaths = jdbcTemplate.query(
                 "SELECT path, count() AS c FROM security_events " + filter.where
-                        + " GROUP BY path ORDER BY c DESC LIMIT " + TOP_N,
+                        + " GROUP BY path ORDER BY c DESC LIMIT " + limits.summaryTopLimit(),
                 (rs, i) -> new PathStats(rs.getString("path"), rs.getLong("c")),
                 filter.params);
 

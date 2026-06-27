@@ -15,6 +15,7 @@ import com.akamai.miniwsa.application.query.SummaryStats.CategoryStats;
 import com.akamai.miniwsa.application.query.SummaryStats.PathStats;
 import com.akamai.miniwsa.application.query.TimeSeriesBucket;
 import com.akamai.miniwsa.application.query.TimeSeriesQuery;
+import com.akamai.miniwsa.config.LimitsProperties;
 import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import java.time.Instant;
@@ -47,10 +48,13 @@ import org.springframework.stereotype.Repository;
 public class InMemoryEventRepository
         implements EventWriteRepository, EventReadRepository, EventQueryRepository {
 
-    private static final int TOP_N = 10;
-
     // Unbounded by design — dev/test only; see the class note. Not for production.
     private final List<EnrichedSecurityEvent> store = new CopyOnWriteArrayList<>();
+    private final LimitsProperties limits;
+
+    public InMemoryEventRepository(LimitsProperties limits) {
+        this.limits = limits;
+    }
 
     @Override
     public void saveAll(List<EnrichedSecurityEvent> events) {
@@ -93,7 +97,7 @@ public class InMemoryEventRepository
                 .entrySet().stream()
                 .map(entry -> new AttackerStats(entry.getKey(), entry.getValue().size(), avgThreatScore(entry.getValue())))
                 .sorted(Comparator.comparingLong(AttackerStats::count).reversed())
-                .limit(TOP_N)
+                .limit(limits.summaryTopLimit())
                 .toList();
 
         List<PathStats> topTargetedPaths = matching.stream()
@@ -101,7 +105,7 @@ public class InMemoryEventRepository
                 .entrySet().stream()
                 .map(entry -> new PathStats(entry.getKey(), entry.getValue()))
                 .sorted(Comparator.comparingLong(PathStats::count).reversed())
-                .limit(TOP_N)
+                .limit(limits.summaryTopLimit())
                 .toList();
 
         return new SummaryStats(matching.size(), byCategory, byAction, topAttackers, topTargetedPaths);

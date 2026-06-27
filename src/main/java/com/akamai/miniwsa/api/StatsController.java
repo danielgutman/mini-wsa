@@ -17,10 +17,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Statistics endpoints. Thin: binds {@code @Valid} query params and delegates to
- * {@link StatsService}. Missing/invalid params (required {@code from}/{@code to}, bad
- * timestamps, {@code to} not after {@code from}) are raised by Bean Validation and rendered
- * as 400s by the central error handler — the controller never throws.
+ * Statistics endpoints: a summary of aggregates (totals, per-category/action counts, top
+ * attackers/paths) and a time-series of event counts bucketed over an interval, for an optional
+ * config and a time range — binding the query params and delegating to {@link StatsService}.
  */
 @RestController
 @RequestMapping("/v1/stats")

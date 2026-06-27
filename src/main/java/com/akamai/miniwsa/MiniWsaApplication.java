@@ -1,8 +1,10 @@
 package com.akamai.miniwsa;
 
+import com.akamai.miniwsa.config.LimitsProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * Entry point for the Mini WSA (Web Security Analytics) service.
@@ -17,6 +19,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
  * builds its own {@code DataSource} only when {@code miniwsa.storage=clickhouse}.
  */
 @SpringBootApplication(exclude = DataSourceAutoConfiguration.class)
+@EnableConfigurationProperties(LimitsProperties.class)
 public class MiniWsaApplication {
 
     public static void main(String[] args) {
