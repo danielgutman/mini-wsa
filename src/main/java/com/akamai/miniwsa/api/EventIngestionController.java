@@ -5,6 +5,8 @@ import com.akamai.miniwsa.api.dto.IngestResponse;
 import com.akamai.miniwsa.api.validation.BatchSizeWithinLimit;
 import com.akamai.miniwsa.application.EventIngestionService;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/v1/events")
+@Tag(name = "Ingestion", description = "Accept and enrich security events")
 public class EventIngestionController {
 
     private final EventIngestionService ingestionService;
@@ -31,6 +34,7 @@ public class EventIngestionController {
 
     @PostMapping("/ingest")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Ingest a single event or a batch; returns the number accepted")
     public IngestResponse ingest(
             @RequestBody @NotEmpty @BatchSizeWithinLimit @Valid List<@Valid IngestEventRequest> events) {
         List<SecurityEvent> domainEvents = events.stream()
