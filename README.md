@@ -13,7 +13,7 @@ exposes analytics APIs for statistics and individual sample retrieval.
 - **Redis** (optional) for persistent, shared alert-rule storage
 - **OpenAPI 3 / Swagger UI** (springdoc) for interactive, code-generated API docs
 - **Micrometer + Prometheus** for metrics (`/actuator/prometheus`)
-- **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse adapter
+- **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse and Redis adapters
 - GitHub Actions: build + tests and a Docker-stack smoke test on every push/PR; a release-gated
   full-pipeline E2E
 
@@ -109,7 +109,7 @@ management needs — a relational DB or Redis is the right fit.
 ## Build & run
 
 Prerequisites: **JDK 21** (the `./mvnw` wrapper handles Maven). Docker is optional (needed
-only for ClickHouse and the Testcontainers/E2E tests).
+only for ClickHouse/Redis and the Testcontainers/E2E tests).
 
 ```bash
 # Build + run the full test suite
@@ -148,10 +148,14 @@ they reach the app — defense-in-depth alongside the app's configurable batch c
 ### App-only against ClickHouse (local dev)
 
 ```bash
-docker compose up -d clickhouse     # just the database
+docker compose up -d clickhouse     # just the events DB (alert rules stay in-memory)
 MINIWSA_STORAGE=clickhouse ./mvnw spring-boot:run
 # defaults: jdbc:clickhouse://localhost:8123/mini_wsa, user/pass mini_wsa
 # overridable via CLICKHOUSE_URL / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
+
+# To persist alert rules too, also start Redis and select it:
+#   docker compose up -d clickhouse redis
+#   MINIWSA_STORAGE=clickhouse MINIWSA_ALERTS_STORAGE=redis REDIS_HOST=localhost ./mvnw spring-boot:run
 docker compose down -v
 ```
 
@@ -331,30 +335,37 @@ Options (all optional): `--count`, `--output`, `--seed`, `--config-id`, `--waves
 
 What runs:
 
-- **Unit** — pure logic: `AttackTypeClassifierTest`, `ThreatScoreCalculatorTest`,
-  `EventIngestionServiceTest` (fakes for clock/repos), `SecurityEventGeneratorTest`.
+- **Unit** — pure logic and services over the real in-memory adapters with a fixed clock:
+  `AttackTypeClassifierTest`, `ThreatScoreCalculatorTest`, `EventIngestionServiceTest`,
+  `AlertServiceTest`, `SecurityEventGeneratorTest`.
 - **API integration** — `@SpringBootTest` + MockMvc over the in-memory store, ingesting
   through the real endpoints: `EventIngestionControllerTest`, `StatsControllerTest`,
-  `SamplesControllerTest`. All assert against **real inserted data** (no mocking).
-- **ClickHouse adapter** — `ClickHouseEventRepositoryTest` uses **Testcontainers** (real
-  ClickHouse). It is **skipped automatically when Docker is unavailable** and runs in CI.
+  `SamplesControllerTest`, `AlertControllerTest`. All assert against **real inserted data** (no mocking).
+- **Adapter integration** — `ClickHouseEventRepositoryTest` (real ClickHouse) and
+  `RedisAlertRuleRepositoryTest` (real Redis) use **Testcontainers**. They are **skipped
+  automatically when Docker is unavailable** and run in CI.
 
-### End-to-end test (10k+ events, ClickHouse)
+### End-to-end test (10k+ events; ClickHouse + Redis)
 
 `FullPipelineE2ETest` generates 10k+ events, ingests them through the HTTP API into a
 production-like ClickHouse, then drives every endpoint and asserts consistent results
-(totals add up, waves surface as top attackers, samples paginate/order correctly, and the
-summary/samples counts agree). It is **CI-only** (guarded by `E2E_ENABLED`) and gates
-releases. To run it locally:
+(totals add up, waves surface as top attackers, samples paginate/order correctly, the
+summary/samples counts agree, and an alert rule fires). It exercises **both stores together** —
+alert rules in **Redis**, event counts from **ClickHouse**. It is **CI-only** (guarded by
+`E2E_ENABLED`) and gates releases. To run it locally:
 
 ```bash
-docker compose up -d clickhouse
+docker compose up -d clickhouse redis
 E2E_ENABLED=true MINIWSA_STORAGE=clickhouse \
 CLICKHOUSE_URL=jdbc:clickhouse://localhost:8123/mini_wsa \
 CLICKHOUSE_USER=mini_wsa CLICKHOUSE_PASSWORD=mini_wsa \
+MINIWSA_ALERTS_STORAGE=redis REDIS_HOST=localhost \
   ./mvnw -Dtest=FullPipelineE2ETest test
 docker compose down -v
 ```
+
+(The alerting test also passes with the default in-memory rule store — drop the `MINIWSA_ALERTS_STORAGE`/`REDIS_HOST`
+lines and the `redis` service to run without Redis.)
 
 ## Releasing
 
@@ -393,6 +404,9 @@ docker run -p 8080:8080 \
   -e CLICKHOUSE_USER=mini_wsa -e CLICKHOUSE_PASSWORD=mini_wsa \
   ghcr.io/danielgutman/mini-wsa:1.0.0
 ```
+
+This single-container run keeps alert rules **in-memory**; to persist them, add
+`-e MINIWSA_ALERTS_STORAGE=redis -e REDIS_HOST=<host>` pointing at a reachable Redis.
 
 > GHCR packages are **private** by default. To `docker pull` without authenticating, make the
 > package public in the repo's **Packages** settings; otherwise run `docker login ghcr.io` first.
