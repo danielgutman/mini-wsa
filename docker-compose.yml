@@ -34,6 +34,9 @@ services:
       retries: 10
 
   app:
+    # Defaults to a local build; set MINIWSA_IMAGE to run a published release image, e.g.
+    #   MINIWSA_IMAGE=ghcr.io/danielgutman/mini-wsa:1.0.0 docker compose pull app && docker compose up -d
+    image: ${MINIWSA_IMAGE:-mini-wsa:local}
     build: .
     container_name: mini-wsa-app
     depends_on:

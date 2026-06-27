@@ -2,14 +2,40 @@ name: Release
 
 # A release is cut on demand. The version comes from pom.xml (not entered by hand): the
 # workflow reads it, runs the full-pipeline E2E test (10k+ events through a production-like
-# ClickHouse), and only on success creates the vX.Y.Z tag + GitHub Release. So a release can
-# only succeed if the end-to-end pipeline passes.
+# ClickHouse), and only on success builds + pushes the versioned container image to GHCR and
+# creates the vX.Y.Z tag + GitHub Release. So a release only happens if the pipeline passes.
 #
 # Developer milestones (vX.Y-something tags) are created manually and do NOT trigger this.
 on:
   workflow_dispatch:
 
 jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+      - name: Resolve version from pom.xml (reject SNAPSHOT)
+        id: v
+        run: |
+          VERSION="$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          echo "Resolved pom.xml version: $VERSION"
+          if [[ "$VERSION" == *-SNAPSHOT ]]; then
+            echo "::error::Refusing to release a SNAPSHOT version ($VERSION). Set a release version in pom.xml first."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   e2e:
     name: Full-pipeline E2E
     runs-on: ubuntu-latest
@@ -50,45 +76,41 @@ jobs:
           CLICKHOUSE_PASSWORD: mini_wsa
         run: ./mvnw --batch-mode --no-transfer-progress -Dtest=FullPipelineE2ETest test
 
-  docker-build:
-    name: Docker image builds
+  publish-image:
+    name: Build & push image to GHCR
+    needs: [version, e2e]   # only build/push the image if the E2E passed
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/mini-wsa
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build the full-stack images
-        run: docker compose build
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push ${{ env.IMAGE }}:${{ env.VERSION }}
+        run: |
+          docker build -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
 
   release:
     name: Create GitHub Release
-    needs: [e2e, docker-build]   # release only if the E2E passed AND the images build
+    needs: [version, e2e, publish-image]   # release only if E2E passed AND the image was published
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: corretto
-          java-version: '21'
-          cache: maven
-
-      - name: Resolve version from pom.xml
-        id: version
-        run: |
-          VERSION="$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)"
-          echo "Resolved pom.xml version: $VERSION"
-          if [[ "$VERSION" == *-SNAPSHOT ]]; then
-            echo "::error::Refusing to release a SNAPSHOT version ($VERSION). Set a release version in pom.xml first."
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Create release v${{ steps.version.outputs.version }}
+      - name: Create release v${{ needs.version.outputs.version }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.version.outputs.version }}
+          name: v${{ needs.version.outputs.version }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true

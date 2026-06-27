@@ -308,10 +308,42 @@ docker compose down -v
 
 Versions come from `pom.xml`. Developer **milestones** are manual `vX.Y-something` tags (e.g.
 `v0.3-stats`) and trigger nothing. A **release** is the `Release` workflow, run manually from the
-**Actions** tab (`workflow_dispatch`) — you don't push the tag yourself. It runs the full-pipeline
-E2E gate **and** a Docker image build, and **only if both pass** reads the pom version (rejecting
-`-SNAPSHOT`) and creates the `vX.Y.Z` tag + GitHub Release. Cut `v1.0.0` by setting
-`<version>1.0.0</version>` in `pom.xml`, then running the workflow.
+**Actions** tab (`workflow_dispatch`) — you don't push the tag yourself. It reads the pom version
+(rejecting `-SNAPSHOT`), runs the full-pipeline E2E gate, and **only on success** builds + pushes
+the versioned container image to **GHCR** and creates the `vX.Y.Z` tag + GitHub Release. Cut
+`v1.0.0` by setting `<version>1.0.0</version>` in `pom.xml`, then running the workflow.
+
+Each release publishes:
+
+```
+ghcr.io/danielgutman/mini-wsa:1.0.0     # the released version
+ghcr.io/danielgutman/mini-wsa:latest    # also moved to the newest release
+```
+
+### Run a released version
+
+The Compose `app` service defaults to a local build but accepts a published image via
+`MINIWSA_IMAGE`, so you can run the **full stack on a specific version** without building anything:
+
+```bash
+export MINIWSA_IMAGE=ghcr.io/danielgutman/mini-wsa:1.0.0
+docker compose pull app          # fetch the published image
+docker compose up -d             # ClickHouse + this app version + edge + Prometheus
+docker compose down -v
+```
+
+Or run just the app container against your own ClickHouse:
+
+```bash
+docker run -p 8080:8080 \
+  -e MINIWSA_STORAGE=clickhouse \
+  -e CLICKHOUSE_URL=jdbc:clickhouse://<host>:8123/mini_wsa \
+  -e CLICKHOUSE_USER=mini_wsa -e CLICKHOUSE_PASSWORD=mini_wsa \
+  ghcr.io/danielgutman/mini-wsa:1.0.0
+```
+
+> GHCR packages are **private** by default. To `docker pull` without authenticating, make the
+> package public in the repo's **Packages** settings; otherwise run `docker login ghcr.io` first.
 
 ## Trade-offs
 
