@@ -134,12 +134,14 @@ public class InMemoryEventRepository
         for (Instant start = floorToInterval(query.from(), stepSeconds);
                 start.isBefore(query.to());
                 start = start.plusSeconds(stepSeconds)) {
-            Instant end = start.plusSeconds(stepSeconds);
+            Instant rawEnd = start.plusSeconds(stepSeconds);
+            // Clamp the last bucket's end to the requested `to` (no overshoot when `to` is unaligned).
             final Instant bucketStart = start;
+            final Instant bucketEnd = rawEnd.isAfter(query.to()) ? query.to() : rawEnd;
             long count = timestamps.stream()
-                    .filter(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(end))
+                    .filter(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(bucketEnd))
                     .count();
-            buckets.add(new TimeSeriesBucket(bucketStart, end, count));
+            buckets.add(new TimeSeriesBucket(bucketStart, bucketEnd, count));
         }
         return buckets;
     }

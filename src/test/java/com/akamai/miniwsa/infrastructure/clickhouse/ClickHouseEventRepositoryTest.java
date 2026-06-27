@@ -157,6 +157,22 @@ class ClickHouseEventRepositoryTest {
         assertThat(buckets.get(2).count()).isEqualTo(1);
     }
 
+    @Test
+    void getTimeSeriesClampsLastBucketToRequestedTo() {
+        long configId = 559L;
+        repository.saveAll(List.of(
+                summaryEvent("cl-1", "1.1.1.1", "/x", RuleCategory.BOT, Action.MONITOR, 10, configId, "2026-05-20T10:06:00Z")));
+
+        // 10:00..10:07 with 5m buckets → [10:00,10:05) and [10:05,10:07); last `to` clamped to 10:07.
+        List<TimeSeriesBucket> buckets = repository.getTimeSeries(new TimeSeriesQuery(
+                configId, Instant.parse("2026-05-20T10:00:00Z"), Instant.parse("2026-05-20T10:07:00Z"), Interval.FIVE_MINUTES));
+
+        assertThat(buckets).hasSize(2);
+        assertThat(buckets.get(1).from()).isEqualTo(Instant.parse("2026-05-20T10:05:00Z"));
+        assertThat(buckets.get(1).to()).isEqualTo(Instant.parse("2026-05-20T10:07:00Z"));
+        assertThat(buckets.get(1).count()).isEqualTo(1);
+    }
+
     private static EnrichedSecurityEvent summaryEvent(String id, String ip, String path, RuleCategory category,
                                                       Action action, int threatScore, long configId, String timestamp) {
         Rule rule = new Rule("r", "R", "m", Severity.HIGH, category);

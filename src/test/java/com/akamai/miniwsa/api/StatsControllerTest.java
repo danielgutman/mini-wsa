@@ -101,6 +101,30 @@ class StatsControllerTest {
     }
 
     @Test
+    void clampsLastBucketWhenToIsNotIntervalAligned() throws Exception {
+        // One event at 10:06 under a dedicated config; query 10:00..10:07 with 5m buckets.
+        String event = """
+                {"eventId":"c1","timestamp":"2026-05-20T10:06:00Z","configId":779002,"clientIp":"1.1.1.1",
+                 "path":"/x","method":"GET","statusCode":200,"rule":{"id":"1","severity":"LOW","category":"BOT"},"action":"MONITOR"}
+                """;
+        mockMvc.perform(post("/v1/events/ingest").contentType(MediaType.APPLICATION_JSON).content(event))
+                .andExpect(status().isCreated());
+
+        // Buckets: [10:00,10:05)=0 and [10:05,10:07)=1 — the last bucket's `to` is clamped to 10:07,
+        // not the grid's 10:10.
+        mockMvc.perform(get("/v1/stats/timeseries")
+                        .param("configId", "779002")
+                        .param("from", "2026-05-20T10:00:00Z")
+                        .param("to", "2026-05-20T10:07:00Z")
+                        .param("interval", "5m"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.buckets.length()").value(2))
+                .andExpect(jsonPath("$.buckets[1].from").value("2026-05-20T10:05:00Z"))
+                .andExpect(jsonPath("$.buckets[1].to").value("2026-05-20T10:07:00Z"))
+                .andExpect(jsonPath("$.buckets[1].count").value(1));
+    }
+
+    @Test
     void rejectsInvalidInterval() throws Exception {
         mockMvc.perform(get("/v1/stats/timeseries")
                         .param("from", "2026-05-20T10:00:00Z")
