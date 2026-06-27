@@ -129,7 +129,7 @@ alert rules persist), the app (in ClickHouse mode), an **nginx edge proxy** that
 request-size limit, and a **Prometheus** that scrapes the app — with one command:
 
 ```bash
-docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
+docker compose up --build           # nginx :8080 → app → ClickHouse + Redis, + Prometheus :9090
 curl http://localhost:8080/ping     # through the edge
 open http://localhost:9090          # Prometheus UI (scrapes the app's metrics)
 docker compose down -v              # stop + wipe data
