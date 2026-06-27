@@ -10,6 +10,7 @@ exposes analytics APIs for statistics and individual sample retrieval.
 - **Java 21**, **Spring Boot 3.3**
 - **Maven** (via the `./mvnw` wrapper)
 - **ClickHouse** (column-oriented analytics store) over JDBC; **Docker Compose** for local dev
+- **Redis** (optional) for persistent, shared alert-rule storage
 - **OpenAPI 3 / Swagger UI** (springdoc) for interactive, code-generated API docs
 - **Micrometer + Prometheus** for metrics (`/actuator/prometheus`)
 - **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse adapter
@@ -112,10 +113,11 @@ curl http://localhost:8080/ping              # {"status":"ok","service":"mini-ws
 curl http://localhost:8080/actuator/health   # {"status":"UP",...}
 ```
 
-### Full stack with Docker (app + ClickHouse + edge + Prometheus)
+### Full stack with Docker (app + ClickHouse + Redis + edge + Prometheus)
 
-Brings up everything — ClickHouse, the app (in ClickHouse mode), an **nginx edge proxy** that
-enforces the request-size limit, and a **Prometheus** that scrapes the app — with one command:
+Brings up everything — ClickHouse, **Redis** (the app runs with `miniwsa.alerts.storage=redis`, so
+alert rules persist), the app (in ClickHouse mode), an **nginx edge proxy** that enforces the
+request-size limit, and a **Prometheus** that scrapes the app — with one command:
 
 ```bash
 docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
@@ -265,7 +267,9 @@ curl "http://localhost:8080/v1/stats/timeseries?configId=14227\
 Define threshold rules, then check which are firing. A rule means *"more than `threshold` events
 of `category` within the last `windowMinutes` minutes"* (`configId` optional — null = all configs).
 `evaluate` counts each rule's category over `[now − windowMinutes, now)` and returns the rules
-whose count exceeds the threshold. Rules are kept **in memory** (not persisted across restarts).
+whose count exceeds the threshold. Rules are kept **in memory** by default; set
+`miniwsa.alerts.storage=redis` to persist them across restarts and share them across instances
+(same port, a different adapter).
 
 ```bash
 # define a rule
@@ -443,11 +447,23 @@ Override per environment via env vars or a k8s ConfigMap; to apply a change with
 downtime**, update the value and do a **rolling restart** (`kubectl rollout restart`) — pods
 cycle one at a time. (No custom config API: that's overkill for deploy-time limits.)
 
+**Storage selectors** (each picks an adapter behind a port, via `@ConditionalOnProperty`):
+
+| Setting | Env var | Default | Options |
+|---|---|---|---|
+| `miniwsa.storage` | `MINIWSA_STORAGE` | `memory` | `memory` \| `clickhouse` (events) |
+| `miniwsa.alerts.storage` | `MINIWSA_ALERTS_STORAGE` | `memory` | `memory` \| `redis` (alert rules) |
+
+The Redis connection is `spring.data.redis.host`/`port` (env `REDIS_HOST` / `REDIS_PORT`); the
+client connects lazily, so the default in-memory profile boots with no Redis running.
+
 ## Known limitations
 
 - Duplicate events are not deduplicated.
 - Repeat-offender counts are computed in memory from one query per batch (see trade-offs).
 - The in-memory adapter is not persistent (dev/test only).
+- Alert rules are not deduplicated. The default store is in-memory (lost on restart); set
+  `miniwsa.alerts.storage=redis` to persist them (the Docker stack does this).
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
   the cap is kept as defensive logic.

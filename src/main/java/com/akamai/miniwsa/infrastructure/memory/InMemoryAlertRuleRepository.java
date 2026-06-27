@@ -6,14 +6,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * In-memory {@link AlertRuleRepository}. Rules are small config-like state, so they live in memory
- * regardless of {@code miniwsa.storage}; they are not persisted across restarts (a documented
- * simplification — see the README).
+ * In-memory {@link AlertRuleRepository} — the default ({@code miniwsa.alerts.storage=memory}).
+ * Simple and dependency-free, but rules are not persisted across restarts; switch to
+ * {@code miniwsa.alerts.storage=redis} (see {@link RedisAlertRuleRepository}) to keep them.
  */
 @Repository
+@ConditionalOnProperty(name = "miniwsa.alerts.storage", havingValue = "memory", matchIfMissing = true)
 public class InMemoryAlertRuleRepository implements AlertRuleRepository {
 
     private final Map<String, AlertRule> rules = new ConcurrentHashMap<>();
