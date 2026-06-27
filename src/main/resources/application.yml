@@ -13,6 +13,10 @@ miniwsa:
     url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/mini_wsa}
     username: ${CLICKHOUSE_USER:mini_wsa}
     password: ${CLICKHOUSE_PASSWORD:mini_wsa}
+  # Operational limits — override per environment (env / ConfigMap); apply via rolling restart.
+  limits:
+    max-batch-size: ${MINIWSA_MAX_BATCH_SIZE:10000}
+    summary-top-limit: ${MINIWSA_SUMMARY_TOP_LIMIT:10}
 
 # Actuator exposes a health endpoint for liveness checks and local verification.
 management:

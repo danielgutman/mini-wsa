@@ -10,9 +10,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Samples endpoint. Thin: binds {@code @Valid} query params and delegates to
- * {@link SamplesService}. Invalid filters/pagination are raised by Bean Validation and
- * rendered as 400s by the central error handler — the controller never throws.
+ * Samples endpoint: returns individual enriched events matching the optional filters
+ * (configId, time range, category, action), newest first and paginated (limit/offset),
+ * by binding the query params and delegating to {@link SamplesService}.
  */
 @RestController
 @RequestMapping("/v1/events")

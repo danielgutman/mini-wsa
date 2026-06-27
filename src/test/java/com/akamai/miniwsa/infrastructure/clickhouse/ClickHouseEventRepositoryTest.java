@@ -9,6 +9,7 @@ import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.TimeSeriesBucket;
 import com.akamai.miniwsa.application.query.TimeSeriesQuery;
+import com.akamai.miniwsa.config.LimitsProperties;
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
 import com.akamai.miniwsa.domain.enums.Severity;
@@ -60,7 +61,7 @@ class ClickHouseEventRepositoryTest {
                 .build();
         jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute(readSchema());
-        repository = new ClickHouseEventRepository(jdbcTemplate);
+        repository = new ClickHouseEventRepository(jdbcTemplate, new LimitsProperties(10_000, 10));
     }
 
     @Test
