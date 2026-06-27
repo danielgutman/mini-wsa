@@ -27,10 +27,23 @@ class OpenApiDocsTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Mini WSA API"))
                 .andExpect(jsonPath("$.info.version").value("1.0.0"))
+                // Relative server so "Try it out" hits the page origin, not a hard-coded host/port.
+                .andExpect(jsonPath("$.servers[0].url").value("/"))
                 .andExpect(jsonPath("$.paths['/v1/events/ingest'].post").exists())
                 .andExpect(jsonPath("$.paths['/v1/stats/summary'].get").exists())
                 .andExpect(jsonPath("$.paths['/v1/stats/timeseries'].get").exists())
                 .andExpect(jsonPath("$.paths['/v1/events/samples'].get").exists());
+    }
+
+    @Test
+    void summaryParamsAreFlattenedAndHideTheValidationGetter() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                // configId/from/to surface as individual query params...
+                .andExpect(jsonPath("$.paths['/v1/stats/summary'].get.parameters[?(@.name=='from')]").exists())
+                .andExpect(jsonPath("$.paths['/v1/stats/summary'].get.parameters[?(@.name=='to')]").exists())
+                // ...but the @AssertTrue 'rangeOrdered' validation getter must not be exposed.
+                .andExpect(jsonPath("$.paths['/v1/stats/summary'].get.parameters[?(@.name=='rangeOrdered')]").doesNotExist());
     }
 
     @Test

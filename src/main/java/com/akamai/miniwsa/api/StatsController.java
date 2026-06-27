@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,7 +37,7 @@ public class StatsController {
 
     @GetMapping("/summary")
     @Operation(summary = "Summary aggregates over a config and time range")
-    public SummaryResponse summary(@Valid SummaryParams params) {
+    public SummaryResponse summary(@Valid @ParameterObject SummaryParams params) {
         SummaryStats stats = statsService.summary(
                 new SummaryQuery(params.configId(), params.from(), params.to()));
         return SummaryResponse.from(params.configId(), params.from(), params.to(), stats);
@@ -44,7 +45,7 @@ public class StatsController {
 
     @GetMapping("/timeseries")
     @Operation(summary = "Event counts bucketed by interval over a time range")
-    public TimeSeriesResponse timeseries(@Valid TimeSeriesParams params) {
+    public TimeSeriesResponse timeseries(@Valid @ParameterObject TimeSeriesParams params) {
         Interval interval = Interval.fromCode(params.interval());
         List<TimeSeriesBucket> buckets = statsService.timeSeries(
                 new TimeSeriesQuery(params.configId(), params.from(), params.to(), interval));

@@ -1,6 +1,7 @@
 package com.akamai.miniwsa.api.dto;
 
 import com.akamai.miniwsa.application.query.Interval;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -23,6 +24,7 @@ public record TimeSeriesParams(
 ) {
 
     @AssertTrue(message = "'to' must be after 'from'")
+    @Schema(hidden = true) // validation predicate, not an input parameter
     public boolean isRangeOrdered() {
         return from == null || to == null || to.isAfter(from);
     }
