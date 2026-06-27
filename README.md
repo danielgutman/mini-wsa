@@ -22,8 +22,6 @@ Clean / hexagonal layering — the **domain is pure** (no Spring, HTTP, JSON, or
 `application` layer orchestrates use cases through **ports** (interfaces); `infrastructure`
 provides the adapters; `api` is thin (controllers + DTOs, with one central error handler).
 
-> 📖 New to the code? [`docs/CODE_TOUR.md`](docs/CODE_TOUR.md) is a guided reading order with
-> end-to-end walkthroughs of an ingest and a query request.
 
 ```
             Client / Generator
@@ -313,7 +311,7 @@ Versions come from `pom.xml`. Developer **milestones** are manual `vX.Y-somethin
 **Actions** tab (`workflow_dispatch`) — you don't push the tag yourself. It runs the full-pipeline
 E2E gate **and** a Docker image build, and **only if both pass** reads the pom version (rejecting
 `-SNAPSHOT`) and creates the `vX.Y.Z` tag + GitHub Release. Cut `v1.0.0` by setting
-`<version>1.0.0</version>` in `pom.xml` (already set), then running the workflow.
+`<version>1.0.0</version>` in `pom.xml`, then running the workflow.
 
 ## Trade-offs
 
