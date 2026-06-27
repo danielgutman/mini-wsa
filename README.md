@@ -42,9 +42,11 @@ provides the adapters; `api` is thin (controllers + DTOs, with one central error
                    ▼
    ports        EventWriteRepository · EventReadRepository · EventQueryRepository
                  · AlertRuleRepository · ClockProvider
-                   ▲ (selected by miniwsa.storage)
-   infrastructure  ├─ ClickHouseEventRepository (JDBC)      ─► ClickHouse
-                   └─ InMemoryEventRepository (default)
+                   ▲ (events: miniwsa.storage · rules: miniwsa.alerts.storage)
+   infrastructure  events ├─ ClickHouseEventRepository (JDBC)        ─► ClickHouse
+                          └─ InMemoryEventRepository (default)
+                   rules  ├─ RedisAlertRuleRepository (JSON)         ─► Redis
+                          └─ InMemoryAlertRuleRepository (default)
 ```
 
 **Ingestion flow:** validate request (Bean Validation) → `EventIngestionService` stamps
@@ -96,6 +98,13 @@ Alternatives considered:
 
 A default **in-memory adapter** is provided so the app runs and is testable without any DB;
 storage is chosen at runtime via `miniwsa.storage` (`memory` | `clickhouse`).
+
+**Alert rules** (the alerting bonus) are a different shape of data — small, mutable, config-like
+state, not append-heavy events — so they use a separate store, selected by `miniwsa.alerts.storage`
+(`memory` | `redis`). The default is in-memory; **Redis** persists rules across restarts and shares
+them across app instances (stored as a hash of JSON rules). ClickHouse is deliberately *not* reused
+here: it is an append-only analytics engine, poor at the small point reads/writes that rule
+management needs — a relational DB or Redis is the right fit.
 
 ## Build & run
 
