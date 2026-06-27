@@ -118,12 +118,8 @@ docker compose down -v              # stop + wipe data
 
 The stack also runs **Prometheus** (`http://localhost:9090`), which scrapes the app directly at
 `app:8080/actuator/prometheus` every 5s (config in `docker/prometheus.yml`). That `app` hostname
-only resolves inside the Compose network — to see the same raw scrape from your host, go through
-the edge:
-
-```bash
-curl -s http://localhost:8080/actuator/prometheus | grep '^miniwsa_'
-```
+only resolves inside the Compose network — from your host you read the same metrics through the
+edge on `localhost:8080` (see [Observability](#observability) below).
 
 Traffic flows `client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
 request bodies (`client_max_body_size 8m`) and returns **413** for oversized payloads before
@@ -154,7 +150,7 @@ out of the box; on top of those, the ingestion pipeline registers a few domain-s
 | `miniwsa_threat_score` | summary | distribution of assigned threat scores |
 
 ```bash
-curl http://localhost:8080/actuator/prometheus | grep '^miniwsa_'
+curl -s http://localhost:8080/actuator/prometheus | grep '^miniwsa_'
 ```
 
 Wire this endpoint into a Prometheus scrape job and the signals drive dashboards/alerts (e.g. a
