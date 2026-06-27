@@ -10,8 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * Request-side representation of the {@code rule} object on an incoming event.
  *
  * <p>Validation lives here (API boundary), not in the domain {@link Rule}.
- * {@code severity} and {@code category} are typed as enums so an unknown value
- * fails JSON binding and is reported as a 400 by the central error handler.
+ * {@code severity} and {@code category} are typed as enums, so only known values bind.
  */
 public record RuleDto(
         @NotBlank String id,

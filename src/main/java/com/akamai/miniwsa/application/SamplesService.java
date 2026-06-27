@@ -9,10 +9,8 @@ import java.time.Instant;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates the samples query. Pagination/range validation is handled at the API
- * boundary (Bean Validation on the params); this layer only applies the pagination
- * defaults and the max-limit clamp (pure transformations, no throwing) before delegating
- * to the {@link EventQueryRepository}.
+ * Orchestrates the samples query: applies the pagination defaults and the max-limit clamp
+ * (pure transformations), then delegates to the {@link EventQueryRepository}.
  */
 @Service
 public class SamplesService {
