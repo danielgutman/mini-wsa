@@ -13,6 +13,8 @@ import com.akamai.miniwsa.domain.model.Rule;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
 import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
+import com.akamai.miniwsa.observability.IngestionMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,7 +38,8 @@ class EventIngestionServiceTest {
     private final RecordingRepository repository = new RecordingRepository();
     private final StubReadRepository readRepository = new StubReadRepository();
     private final EventIngestionService service = new EventIngestionService(
-            fixedClock, repository, readRepository, new AttackTypeClassifier(), new ThreatScoreCalculator());
+            fixedClock, repository, readRepository, new AttackTypeClassifier(), new ThreatScoreCalculator(),
+            new IngestionMetrics(new SimpleMeterRegistry()));
 
     @Test
     void enrichesSingleEventWithAttackTypeScoreAndReceivedAt() {

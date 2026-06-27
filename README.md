@@ -110,10 +110,16 @@ Brings up everything — ClickHouse, the app (in ClickHouse mode), and an **ngin
 that enforces the request-size limit — with one command:
 
 ```bash
-docker compose up --build           # nginx :8080 → app → ClickHouse
+docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
 curl http://localhost:8080/ping     # through the edge
+open http://localhost:9090          # Prometheus UI (scrapes the app's metrics)
 docker compose down -v              # stop + wipe data
 ```
+
+The stack also runs **Prometheus** (`http://localhost:9090`), which scrapes the app directly at
+`app:8080/actuator/prometheus` every 5s (config in `docker/prometheus.yml`). That `app` hostname
+only resolves inside the Compose network — from your host you read the same metrics through the
+edge on `localhost:8080` (see [Observability](#observability) below).
 
 Traffic flows `client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
 request bodies (`client_max_body_size 8m`) and returns **413** for oversized payloads before
@@ -129,6 +135,26 @@ MINIWSA_STORAGE=clickhouse ./mvnw spring-boot:run
 # overridable via CLICKHOUSE_URL / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
 docker compose down -v
 ```
+
+## Observability
+
+Metrics are exposed in Prometheus format at `GET /actuator/prometheus` (Micrometer). Spring Boot
+already provides HTTP request rate/latency (`http_server_requests_seconds*`) and JVM/system meters
+out of the box; on top of those, the ingestion pipeline registers a few domain-specific signals:
+
+| Metric | Type | What it tells you |
+|---|---|---|
+| `miniwsa_ingest_events_total` | counter | events accepted and enriched |
+| `miniwsa_ingest_repeat_offenders_events_total` | counter | how many were flagged as repeat offenders |
+| `miniwsa_ingest_batch_size_events` | summary | request batch sizes (count/sum/max) |
+| `miniwsa_threat_score` | summary | distribution of assigned threat scores |
+
+```bash
+curl -s http://localhost:8080/actuator/prometheus | grep '^miniwsa_'
+```
+
+Wire this endpoint into a Prometheus scrape job and the signals drive dashboards/alerts (e.g. a
+spike in repeat offenders or in the threat-score average).
 
 ## API documentation
 
