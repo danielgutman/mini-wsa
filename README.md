@@ -10,6 +10,7 @@ exposes analytics APIs for statistics and individual sample retrieval.
 - **Java 21**, **Spring Boot 3.3**
 - **Maven** (via the `./mvnw` wrapper)
 - **ClickHouse** (column-oriented analytics store) over JDBC; **Docker Compose** for local dev
+- **OpenAPI 3 / Swagger UI** (springdoc) for interactive, code-generated API docs
 - **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse adapter
 - GitHub Actions: unit CI on every push, a release-gated full-pipeline E2E
 
@@ -130,6 +131,13 @@ docker compose down -v
 ```
 
 ## API documentation
+
+Interactive docs are generated from the code (springdoc/OpenAPI 3):
+
+- **Swagger UI** — `http://localhost:8080/swagger-ui.html` (try the endpoints in the browser)
+- **OpenAPI spec** — `http://localhost:8080/v3/api-docs` (JSON, for client codegen / import)
+
+The reference below mirrors that spec.
 
 ### Ingest events — `POST /v1/events/ingest`
 

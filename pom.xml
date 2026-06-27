@@ -36,6 +36,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- OpenAPI 3 spec (/v3/api-docs) + Swagger UI (/swagger-ui.html), generated from the code -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.6.0</version>
+        </dependency>
 
         <!-- Storage: ClickHouse over JDBC (adapter active only when miniwsa.storage=clickhouse) -->
         <dependency>

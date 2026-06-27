@@ -2,6 +2,7 @@ package com.akamai.miniwsa.api.dto;
 
 import com.akamai.miniwsa.domain.enums.Action;
 import com.akamai.miniwsa.domain.enums.RuleCategory;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import java.time.Instant;
@@ -24,6 +25,7 @@ public record SamplesParams(
 ) {
 
     @AssertTrue(message = "'to' must be after 'from'")
+    @Schema(hidden = true) // validation predicate, not an input parameter
     public boolean isRangeOrdered() {
         return from == null || to == null || to.isAfter(from);
     }

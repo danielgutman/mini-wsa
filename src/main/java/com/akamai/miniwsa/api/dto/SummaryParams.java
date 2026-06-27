@@ -1,5 +1,6 @@
 package com.akamai.miniwsa.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
@@ -19,6 +20,7 @@ public record SummaryParams(
 ) {
 
     @AssertTrue(message = "'to' must be after 'from'")
+    @Schema(hidden = true) // validation predicate, not an input parameter
     public boolean isRangeOrdered() {
         return from == null || to == null || to.isAfter(from);
     }

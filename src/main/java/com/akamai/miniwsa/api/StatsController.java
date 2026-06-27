@@ -10,8 +10,11 @@ import com.akamai.miniwsa.application.query.SummaryQuery;
 import com.akamai.miniwsa.application.query.SummaryStats;
 import com.akamai.miniwsa.application.query.TimeSeriesBucket;
 import com.akamai.miniwsa.application.query.TimeSeriesQuery;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/v1/stats")
+@Tag(name = "Statistics", description = "Aggregated and time-series analytics")
 public class StatsController {
 
     private final StatsService statsService;
@@ -32,14 +36,16 @@ public class StatsController {
     }
 
     @GetMapping("/summary")
-    public SummaryResponse summary(@Valid SummaryParams params) {
+    @Operation(summary = "Summary aggregates over a config and time range")
+    public SummaryResponse summary(@Valid @ParameterObject SummaryParams params) {
         SummaryStats stats = statsService.summary(
                 new SummaryQuery(params.configId(), params.from(), params.to()));
         return SummaryResponse.from(params.configId(), params.from(), params.to(), stats);
     }
 
     @GetMapping("/timeseries")
-    public TimeSeriesResponse timeseries(@Valid TimeSeriesParams params) {
+    @Operation(summary = "Event counts bucketed by interval over a time range")
+    public TimeSeriesResponse timeseries(@Valid @ParameterObject TimeSeriesParams params) {
         Interval interval = Interval.fromCode(params.interval());
         List<TimeSeriesBucket> buckets = statsService.timeSeries(
                 new TimeSeriesQuery(params.configId(), params.from(), params.to(), interval));
