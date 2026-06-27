@@ -33,6 +33,20 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: mini-wsa-redis
+    command: ["redis-server", "--appendonly", "yes"]   # durable persistence to /data
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   app:
     # Defaults to a local build; set MINIWSA_IMAGE to run a published release image, e.g.
     #   MINIWSA_IMAGE=ghcr.io/danielgutman/mini-wsa:1.0.0 docker compose pull app && docker compose up -d
@@ -42,11 +56,16 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       MINIWSA_STORAGE: clickhouse
       CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/mini_wsa
       CLICKHOUSE_USER: mini_wsa
       CLICKHOUSE_PASSWORD: mini_wsa
+      # Persist alert rules in Redis (survive restarts, shared across instances).
+      MINIWSA_ALERTS_STORAGE: redis
+      REDIS_HOST: redis
     expose:
       - "8080"
     healthcheck:
@@ -79,3 +98,4 @@ services:
 
 volumes:
   clickhouse-data:
+  redis-data:

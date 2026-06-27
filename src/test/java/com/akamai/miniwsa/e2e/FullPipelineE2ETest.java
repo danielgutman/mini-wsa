@@ -2,6 +2,10 @@ package com.akamai.miniwsa.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.akamai.miniwsa.domain.enums.Action;
+import com.akamai.miniwsa.domain.enums.RuleCategory;
+import com.akamai.miniwsa.domain.enums.Severity;
+import com.akamai.miniwsa.domain.model.Rule;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import com.akamai.miniwsa.generator.GeneratorConfig;
 import com.akamai.miniwsa.generator.SecurityEventGenerator;
@@ -128,6 +132,58 @@ class FullPipelineE2ETest {
             bucketed += bucket.get("count").asLong();
         }
         assertThat(bucketed).isEqualTo(total);
+    }
+
+    @Test
+    void definesAndEvaluatesAlerts() throws Exception {
+        // Exercises both stores end-to-end: rules live in the alert-rule store (Redis in CI),
+        // while the counts are queried from the events in ClickHouse.
+        // A dedicated config + "now"-stamped events so they fall inside the evaluation window
+        // (and stay isolated from the 10k historical dataset above).
+        long alertConfigId = 99999L;
+        Instant now = Instant.now();
+        List<SecurityEvent> burst = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            burst.add(dosEvent("al-" + i, now, alertConfigId));
+        }
+        assertThat(ingest(burst)).isEqualTo(6);
+
+        // One rule the burst exceeds (6 > 5), one it does not (6 < 1000).
+        String firingRuleId = defineRule(alertConfigId, "DOS", 5, 60);
+        String quietRuleId = defineRule(alertConfigId, "DOS", 1000, 60);
+
+        JsonNode evaluation = getJson("/v1/alerts/evaluate");
+        JsonNode fired = firingFor(evaluation, firingRuleId);
+        assertThat(fired).isNotNull();
+        assertThat(fired.get("actualCount").asInt()).isEqualTo(6);
+        assertThat(fired.get("category").asText()).isEqualTo("DOS");
+        assertThat(firingFor(evaluation, quietRuleId)).isNull();
+    }
+
+    private static SecurityEvent dosEvent(String id, Instant timestamp, long configId) {
+        Rule rule = new Rule("1", "DOS_RULE", "DoS pattern", Severity.LOW, RuleCategory.DOS);
+        return new SecurityEvent(id, timestamp, configId, "pol", "9.9.9.9", "host", "/x", "GET",
+                200, "ua", rule, Action.MONITOR, null, 10L, 20L);
+    }
+
+    private String defineRule(long configId, String category, int threshold, int windowMinutes) {
+        String body = "{\"configId\":" + configId + ",\"category\":\"" + category + "\",\"threshold\":"
+                + threshold + ",\"windowMinutes\":" + windowMinutes + "}";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<JsonNode> response = rest.postForEntity(
+                "/v1/alerts/define", new HttpEntity<>(body, headers), JsonNode.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return response.getBody().get("id").asText();
+    }
+
+    private static JsonNode firingFor(JsonNode evaluation, String ruleId) {
+        for (JsonNode node : evaluation.get("firing")) {
+            if (ruleId.equals(node.get("ruleId").asText())) {
+                return node;
+            }
+        }
+        return null;
     }
 
     private int ingest(List<SecurityEvent> chunk) throws Exception {

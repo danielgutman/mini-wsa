@@ -10,6 +10,7 @@ exposes analytics APIs for statistics and individual sample retrieval.
 - **Java 21**, **Spring Boot 3.3**
 - **Maven** (via the `./mvnw` wrapper)
 - **ClickHouse** (column-oriented analytics store) over JDBC; **Docker Compose** for local dev
+- **Redis** (optional) for persistent, shared alert-rule storage
 - **OpenAPI 3 / Swagger UI** (springdoc) for interactive, code-generated API docs
 - **Micrometer + Prometheus** for metrics (`/actuator/prometheus`)
 - **JUnit 5 + AssertJ**; **Testcontainers** for the ClickHouse adapter
@@ -33,13 +34,14 @@ provides the adapters; `api` is thin (controllers + DTOs, with one central error
    api          Controllers ──► ErrorHandlingAdvice (RFC 7807 ProblemDetail)
                    │  DTOs ⇄ domain
                    ▼
-   application  EventIngestionService · StatsService · SamplesService
+   application  EventIngestionService · StatsService · SamplesService · AlertService
                    │            │
                    │            └─► Pure domain logic (domain/service)
                    │                  • AttackTypeClassifier
                    │                  • ThreatScoreCalculator
                    ▼
-   ports        EventWriteRepository · EventReadRepository · EventQueryRepository · ClockProvider
+   ports        EventWriteRepository · EventReadRepository · EventQueryRepository
+                 · AlertRuleRepository · ClockProvider
                    ▲ (selected by miniwsa.storage)
    infrastructure  ├─ ClickHouseEventRepository (JDBC)      ─► ClickHouse
                    └─ InMemoryEventRepository (default)
@@ -52,6 +54,10 @@ for the repeat-offender count, computes the threat score with the **pure**
 
 **Query flow:** controllers bind `@Valid` params → `StatsService`/`SamplesService` →
 `EventQueryRepository` → the active adapter (ClickHouse `GROUP BY`/top-N, or in-memory streams).
+
+**Alerting flow (bonus):** `AlertService` stores threshold rules (`AlertRuleRepository`) and, on
+`evaluate`, counts each rule's category over `[now − window, now)` (`ClockProvider` + the same
+`EventQueryRepository`) — reusing the existing ports rather than adding a new pipeline.
 
 ### Enrichment rules
 
@@ -107,10 +113,11 @@ curl http://localhost:8080/ping              # {"status":"ok","service":"mini-ws
 curl http://localhost:8080/actuator/health   # {"status":"UP",...}
 ```
 
-### Full stack with Docker (app + ClickHouse + edge + Prometheus)
+### Full stack with Docker (app + ClickHouse + Redis + edge + Prometheus)
 
-Brings up everything — ClickHouse, the app (in ClickHouse mode), an **nginx edge proxy** that
-enforces the request-size limit, and a **Prometheus** that scrapes the app — with one command:
+Brings up everything — ClickHouse, **Redis** (the app runs with `miniwsa.alerts.storage=redis`, so
+alert rules persist), the app (in ClickHouse mode), an **nginx edge proxy** that enforces the
+request-size limit, and a **Prometheus** that scrapes the app — with one command:
 
 ```bash
 docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
@@ -255,6 +262,42 @@ curl "http://localhost:8080/v1/stats/timeseries?configId=14227\
 }
 ```
 
+### Alert rules — `POST /v1/alerts/define` and `GET /v1/alerts/evaluate` (bonus)
+
+Define threshold rules, then check which are firing. A rule means *"more than `threshold` events
+of `category` within the last `windowMinutes` minutes"* (`configId` optional — null = all configs).
+`evaluate` counts each rule's category over `[now − windowMinutes, now)` and returns the rules
+whose count exceeds the threshold. Rules are kept **in memory** by default; set
+`miniwsa.alerts.storage=redis` to persist them across restarts and share them across instances
+(same port, a different adapter).
+
+```bash
+# define a rule
+curl -X POST http://localhost:8080/v1/alerts/define \
+  -H "Content-Type: application/json" \
+  -d '{"configId":14227,"category":"INJECTION","threshold":100,"windowMinutes":5}'
+# -> 201 {"id":"rule-1","configId":14227,"category":"INJECTION","threshold":100,"windowMinutes":5}
+
+# evaluate all defined rules against current data
+curl http://localhost:8080/v1/alerts/evaluate
+```
+
+```json
+{
+  "evaluatedAt": "2026-05-20T14:35:00Z",
+  "firing": [
+    {
+      "ruleId": "rule-1", "configId": 14227, "category": "INJECTION",
+      "threshold": 100, "windowMinutes": 5, "actualCount": 143,
+      "windowFrom": "2026-05-20T14:30:00Z", "windowTo": "2026-05-20T14:35:00Z"
+    }
+  ]
+}
+```
+
+The window is relative to **now**, so only recent events fire a rule. Invalid definitions
+(missing `category`, `threshold`/`windowMinutes` < 1) → `400`.
+
 ## Generating test data
 
 A **seeded** generator produces realistic events plus **attack waves** (bursts from one IP
@@ -361,9 +404,9 @@ docker run -p 8080:8080 \
 
 ## Roadmap (with more time)
 
-The core pipeline is complete, plus several extras — time-series stats, configurable limits,
-Prometheus metrics, OpenAPI/Swagger, and the full Docker stack. The next steps, in rough priority
-order:
+The core pipeline is complete, plus several extras — time-series stats, alerting (both bonus
+challenges), configurable limits, Prometheus metrics, OpenAPI/Swagger, and the full Docker stack.
+The next steps, in rough priority order:
 
 **Security**
 - **Authentication & authorization** — protect ingest and query (API key / mTLS, or OAuth2 at the
@@ -404,11 +447,23 @@ Override per environment via env vars or a k8s ConfigMap; to apply a change with
 downtime**, update the value and do a **rolling restart** (`kubectl rollout restart`) — pods
 cycle one at a time. (No custom config API: that's overkill for deploy-time limits.)
 
+**Storage selectors** (each picks an adapter behind a port, via `@ConditionalOnProperty`):
+
+| Setting | Env var | Default | Options |
+|---|---|---|---|
+| `miniwsa.storage` | `MINIWSA_STORAGE` | `memory` | `memory` \| `clickhouse` (events) |
+| `miniwsa.alerts.storage` | `MINIWSA_ALERTS_STORAGE` | `memory` | `memory` \| `redis` (alert rules) |
+
+The Redis connection is `spring.data.redis.host`/`port` (env `REDIS_HOST` / `REDIS_PORT`); the
+client connects lazily, so the default in-memory profile boots with no Redis running.
+
 ## Known limitations
 
 - Duplicate events are not deduplicated.
 - Repeat-offender counts are computed in memory from one query per batch (see trade-offs).
 - The in-memory adapter is not persistent (dev/test only).
+- Alert rules are not deduplicated. The default store is in-memory (lost on restart); set
+  `miniwsa.alerts.storage=redis` to persist them (the Docker stack does this).
 - Docker Compose runs a single-node ClickHouse (no replication/sharding).
 - The threat-score cap (100) is currently unreachable — the max reachable score is 90;
   the cap is kept as defensive logic.

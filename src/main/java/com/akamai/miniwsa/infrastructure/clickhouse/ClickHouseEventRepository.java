@@ -208,6 +208,22 @@ public class ClickHouseEventRepository
         return buckets;
     }
 
+    @Override
+    public long countByCategory(Long configId, RuleCategory category, Instant fromInclusive, Instant toExclusive) {
+        StringBuilder where = new StringBuilder("WHERE rule_category = ? AND timestamp >= ? AND timestamp < ?");
+        List<Object> params = new ArrayList<>();
+        params.add(category.name());
+        params.add(utc(fromInclusive));
+        params.add(utc(toExclusive));
+        if (configId != null) {
+            where.append(" AND config_id = ?");
+            params.add(configId);
+        }
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT count() FROM security_events " + where, Long.class, params.toArray());
+        return count == null ? 0L : count;
+    }
+
     /** Builds the shared WHERE clause and positional parameters for the time range (+ optional config). */
     private static Filter rangeFilter(Long configId, Instant from, Instant to) {
         StringBuilder where = new StringBuilder("WHERE timestamp >= ? AND timestamp < ?");

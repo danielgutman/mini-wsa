@@ -1,6 +1,12 @@
 spring:
   application:
     name: mini-wsa
+  # Redis connection — only used when miniwsa.alerts.storage=redis (the client connects lazily,
+  # so the default in-memory profile boots without Redis running).
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 server:
   port: 8080
@@ -13,6 +19,9 @@ miniwsa:
     url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/mini_wsa}
     username: ${CLICKHOUSE_USER:mini_wsa}
     password: ${CLICKHOUSE_PASSWORD:mini_wsa}
+  # Alert-rule store: "memory" (default) or "redis" (persists rules across restarts).
+  alerts:
+    storage: ${MINIWSA_ALERTS_STORAGE:memory}
   # Operational limits — override per environment (env / ConfigMap); apply via rolling restart.
   limits:
     max-batch-size: ${MINIWSA_MAX_BATCH_SIZE:10000}
@@ -27,6 +36,11 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    # Alerting (the only Redis user) is optional, so a Redis outage must not flip the whole app's
+    # health to DOWN — and the default in-memory profile has no Redis at all.
+    redis:
+      enabled: false
 
 logging:
   level:

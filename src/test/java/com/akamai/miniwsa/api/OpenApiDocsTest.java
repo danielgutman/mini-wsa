@@ -32,7 +32,9 @@ class OpenApiDocsTest {
                 .andExpect(jsonPath("$.paths['/v1/events/ingest'].post").exists())
                 .andExpect(jsonPath("$.paths['/v1/stats/summary'].get").exists())
                 .andExpect(jsonPath("$.paths['/v1/stats/timeseries'].get").exists())
-                .andExpect(jsonPath("$.paths['/v1/events/samples'].get").exists());
+                .andExpect(jsonPath("$.paths['/v1/events/samples'].get").exists())
+                .andExpect(jsonPath("$.paths['/v1/alerts/define'].post").exists())
+                .andExpect(jsonPath("$.paths['/v1/alerts/evaluate'].get").exists());
     }
 
     @Test
