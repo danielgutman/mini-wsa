@@ -107,10 +107,10 @@ curl http://localhost:8080/ping              # {"status":"ok","service":"mini-ws
 curl http://localhost:8080/actuator/health   # {"status":"UP",...}
 ```
 
-### Full stack with Docker (app + ClickHouse + edge)
+### Full stack with Docker (app + ClickHouse + edge + Prometheus)
 
-Brings up everything — ClickHouse, the app (in ClickHouse mode), and an **nginx edge proxy**
-that enforces the request-size limit — with one command:
+Brings up everything — ClickHouse, the app (in ClickHouse mode), an **nginx edge proxy** that
+enforces the request-size limit, and a **Prometheus** that scrapes the app — with one command:
 
 ```bash
 docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
