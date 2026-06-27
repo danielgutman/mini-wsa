@@ -18,12 +18,12 @@ miniwsa:
     max-batch-size: ${MINIWSA_MAX_BATCH_SIZE:10000}
     summary-top-limit: ${MINIWSA_SUMMARY_TOP_LIMIT:10}
 
-# Actuator exposes a health endpoint for liveness checks and local verification.
+# Actuator exposes health (liveness) plus Micrometer metrics in Prometheus format.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always

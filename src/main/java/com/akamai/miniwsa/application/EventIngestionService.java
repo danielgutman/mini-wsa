@@ -9,8 +9,10 @@ import com.akamai.miniwsa.domain.model.EnrichedSecurityEvent;
 import com.akamai.miniwsa.domain.model.SecurityEvent;
 import com.akamai.miniwsa.domain.service.AttackTypeClassifier;
 import com.akamai.miniwsa.domain.service.ThreatScoreCalculator;
+import com.akamai.miniwsa.observability.IngestionMetrics;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -47,17 +49,20 @@ public class EventIngestionService {
     private final EventReadRepository readRepository;
     private final AttackTypeClassifier attackTypeClassifier;
     private final ThreatScoreCalculator threatScoreCalculator;
+    private final IngestionMetrics metrics;
 
     public EventIngestionService(ClockProvider clock,
                                  EventWriteRepository writeRepository,
                                  EventReadRepository readRepository,
                                  AttackTypeClassifier attackTypeClassifier,
-                                 ThreatScoreCalculator threatScoreCalculator) {
+                                 ThreatScoreCalculator threatScoreCalculator,
+                                 IngestionMetrics metrics) {
         this.clock = clock;
         this.writeRepository = writeRepository;
         this.readRepository = readRepository;
         this.attackTypeClassifier = attackTypeClassifier;
         this.threatScoreCalculator = threatScoreCalculator;
+        this.metrics = metrics;
     }
 
     /**
@@ -70,11 +75,19 @@ public class EventIngestionService {
         Instant receivedAt = clock.now();
         Map<String, List<Instant>> historyByIp = loadRepeatOffenderHistory(events);
 
-        List<EnrichedSecurityEvent> enriched = events.stream()
-                .map(event -> enrich(event, receivedAt, historyByIp))
-                .toList();
+        // Compute the repeat-offender flag once per event: it feeds both the score and the metric.
+        List<EnrichedSecurityEvent> enriched = new ArrayList<>(events.size());
+        long repeatOffenders = 0;
+        for (SecurityEvent event : events) {
+            boolean repeatOffender = isRepeatOffender(event, historyByIp);
+            if (repeatOffender) {
+                repeatOffenders++;
+            }
+            enriched.add(enrich(event, receivedAt, repeatOffender));
+        }
 
         writeRepository.saveAll(enriched);
+        metrics.recordBatch(enriched, repeatOffenders);
         log.debug("Ingested and enriched {} event(s) at {}", enriched.size(), receivedAt);
         return enriched.size();
     }
@@ -95,10 +108,8 @@ public class EventIngestionService {
         return readRepository.findEventTimestampsByClientIp(clientIps, windowStart, maxTimestamp);
     }
 
-    private EnrichedSecurityEvent enrich(SecurityEvent event, Instant receivedAt,
-                                         Map<String, List<Instant>> historyByIp) {
+    private EnrichedSecurityEvent enrich(SecurityEvent event, Instant receivedAt, boolean repeatOffender) {
         String attackType = attackTypeClassifier.classify(event.rule().category());
-        boolean repeatOffender = isRepeatOffender(event, historyByIp);
         int threatScore = threatScoreCalculator.calculate(
                 event.rule().severity(), event.action(), event.path(), repeatOffender);
         return new EnrichedSecurityEvent(event, attackType, threatScore, receivedAt);

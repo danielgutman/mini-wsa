@@ -130,6 +130,26 @@ MINIWSA_STORAGE=clickhouse ./mvnw spring-boot:run
 docker compose down -v
 ```
 
+## Observability
+
+Metrics are exposed in Prometheus format at `GET /actuator/prometheus` (Micrometer). Spring Boot
+already provides HTTP request rate/latency (`http_server_requests_seconds*`) and JVM/system meters
+out of the box; on top of those, the ingestion pipeline registers a few domain-specific signals:
+
+| Metric | Type | What it tells you |
+|---|---|---|
+| `miniwsa_ingest_events_total` | counter | events accepted and enriched |
+| `miniwsa_ingest_repeat_offenders_events_total` | counter | how many were flagged as repeat offenders |
+| `miniwsa_ingest_batch_size_events` | summary | request batch sizes (count/sum/max) |
+| `miniwsa_threat_score` | summary | distribution of assigned threat scores |
+
+```bash
+curl http://localhost:8080/actuator/prometheus | grep '^miniwsa_'
+```
+
+Wire this endpoint into a Prometheus scrape job and the signals drive dashboards/alerts (e.g. a
+spike in repeat offenders or in the threat-score average).
+
 ## API documentation
 
 Interactive docs are generated from the code (springdoc/OpenAPI 3):
