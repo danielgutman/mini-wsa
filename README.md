@@ -110,12 +110,15 @@ Brings up everything — ClickHouse, the app (in ClickHouse mode), and an **ngin
 that enforces the request-size limit — with one command:
 
 ```bash
-docker compose up --build           # nginx :8080 → app → ClickHouse
+docker compose up --build           # nginx :8080 → app → ClickHouse, + Prometheus :9090
 curl http://localhost:8080/ping     # through the edge
+open http://localhost:9090          # Prometheus UI (scrapes the app's metrics)
 docker compose down -v              # stop + wipe data
 ```
 
-Traffic flows `client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
+The stack also runs **Prometheus** (`http://localhost:9090`), which scrapes the app directly at
+`app:8080/actuator/prometheus` every 5s (config in `docker/prometheus.yml`). Traffic flows
+`client → nginx (:8080) → app (:8080) → clickhouse (:8123)`. The edge caps
 request bodies (`client_max_body_size 8m`) and returns **413** for oversized payloads before
 they reach the app — defense-in-depth alongside the app's configurable batch cap
 (`miniwsa.limits.max-batch-size`, a JSON **400**). ClickHouse's schema is auto-applied on first start.
