@@ -26,7 +26,7 @@ class OpenApiDocsTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Mini WSA API"))
-                .andExpect(jsonPath("$.info.version").value("1.0.0"))
+                .andExpect(jsonPath("$.info.version").value("1.1.0"))
                 // Relative server so "Try it out" hits the page origin, not a hard-coded host/port.
                 .andExpect(jsonPath("$.servers[0].url").value("/"))
                 .andExpect(jsonPath("$.paths['/v1/events/ingest'].post").exists())
